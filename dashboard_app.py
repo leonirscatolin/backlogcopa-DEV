@@ -13,7 +13,6 @@ from urllib.parse import quote
 import json
 import colorsys
 
-# --- Configuração da Página ---
 st.set_page_config(
     layout="wide",
     page_title="Backlog Copa Energia + Belago",
@@ -21,7 +20,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- FUNÇÕES ---
 @st.cache_resource
 def get_github_repo():
     try:
@@ -171,7 +169,6 @@ def sync_contacted_tickets():
         update_github_file(st.session_state.repo, "contacted_tickets.json", json_content.encode('utf-8'), commit_msg)
     st.session_state.scroll_to_details = True
 
-# --- INÍCIO DA EXECUÇÃO DO SCRIPT ---
 st.html("""
     <style>
         #GithubIcon { visibility: hidden; }
@@ -390,7 +387,6 @@ try:
                 _, col_total_tab2, _ = st.columns([2, 1.5, 2])
                 with col_total_tab2: st.markdown( f"""<div class="metric-box"><span class="value">{total_chamados}</span><span class="label">Total de Chamados</span></div>""", unsafe_allow_html=True )
                 st.markdown("---")
-                
                 aging_counts_tab2 = df_aging['Faixa de Antiguidade'].value_counts().reset_index()
                 aging_counts_tab2.columns = ['Faixa de Antiguidade', 'Quantidade']
                 ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
@@ -398,7 +394,6 @@ try:
                 aging_counts_tab2 = pd.merge(todas_as_faixas_tab2, aging_counts_tab2, on='Faixa de Antiguidade', how='left').fillna(0).astype({'Quantidade': int})
                 aging_counts_tab2['Faixa de Antiguidade'] = pd.Categorical(aging_counts_tab2['Faixa de Antiguidade'], categories=ordem_faixas, ordered=True)
                 aging_counts_tab2 = aging_counts_tab2.sort_values('Faixa de Antiguidade')
-                
                 cols_tab2 = st.columns(len(ordem_faixas))
                 for i, row in aging_counts_tab2.iterrows():
                     with cols_tab2[i]: st.markdown( f"""<div class="metric-box"><span class="value">{row['Quantidade']}</span><span class="label">{row['Faixa de Antiguidade']}</span></div>""", unsafe_allow_html=True )
@@ -450,7 +445,7 @@ try:
                     fig_stacked_bar.update_traces(textangle=0, textfont_size=12)
                     fig_stacked_bar.update_layout(height=dynamic_height, legend_title_text='Antiguidade')
                 
-                else: # Vertical
+                else:
                     fig_stacked_bar = px.bar(
                         chart_data, x='Atribuir a um grupo', y='Quantidade',
                         color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo",
