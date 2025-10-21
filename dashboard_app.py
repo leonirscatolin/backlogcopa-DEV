@@ -548,10 +548,9 @@ try:
 except Exception as e:
     st.error(f"Ocorreu um erro ao carregar os dados: {e}")
 
-# --- NOVO RODAPÉ ---
 st.markdown("---")
 st.markdown("""
     <p style='text-align: center; color: #666; font-size: 0.9em;'>
-        Versão Beta 0.8.0 | Este dashboard está em constante desenvolvimento.
+        v0.8.1-691 | Este dashboard está em desenvolvimento.
     </p>
 """, unsafe_allow_html=True)
