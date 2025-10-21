@@ -406,41 +406,48 @@ try:
                 
                 st.markdown("---")
                 st.subheader("Distribuição do Backlog por Grupo")
-
-                chart_data = df_aging.groupby(['Atribuir a um grupo', 'Faixa de Antiguidade']).size().reset_index(name='Quantidade')
-                
-                group_totals = chart_data.groupby('Atribuir a um grupo')['Quantidade'].sum().sort_values(ascending=False)
                 
                 # ######################## CÓDIGO DO GRÁFICO ATUALIZADO ########################
-                num_groups = len(group_totals)
-                dynamic_height = max(500, num_groups * 30) # Altura mínima de 500px, +30px por grupo
+                
+                orientation_choice = st.radio(
+                    "Orientação do Gráfico:",
+                    ["Vertical", "Horizontal"],
+                    index=1, # Começa com Horizontal selecionado
+                    horizontal=True
+                )
 
+                chart_data = df_aging.groupby(['Atribuir a um grupo', 'Faixa de Antiguidade']).size().reset_index(name='Quantidade')
+                group_totals = chart_data.groupby('Atribuir a um grupo')['Quantidade'].sum().sort_values(ascending=False)
+                
                 color_map = {
                     "0-2 dias": "#2ca02c", "3-5 dias": "#98df8a",
                     "6-10 dias": "#ff7f0e", "11-20 dias": "#ffbb78",
                     "21-29 dias": "#d62728", "30+ dias": "#ff9896"
                 }
 
-                fig_stacked_bar = px.bar(
-                    chart_data,
-                    x='Quantidade',
-                    y='Atribuir a um grupo',
-                    orientation='h', # Gráfico na horizontal para melhor leitura dos nomes
-                    color='Faixa de Antiguidade',
-                    title="Composição da Idade do Backlog por Grupo",
-                    labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': ''},
-                    category_orders={
-                        'Atribuir a um grupo': group_totals.index.tolist(), # Ordena do maior para o menor
-                        'Faixa de Antiguidade': ordem_faixas
-                    },
-                    color_discrete_map=color_map,
-                    text_auto=True # Mostra o valor dentro de cada segmento
-                )
-                fig_stacked_bar.update_layout(
-                    height=dynamic_height,
-                    yaxis={'categoryorder':'total ascending'}, # Garante a ordem correta
-                    legend_title_text='Antiguidade'
-                )
+                if orientation_choice == 'Horizontal':
+                    num_groups = len(group_totals)
+                    dynamic_height = max(500, num_groups * 30)
+
+                    fig_stacked_bar = px.bar(
+                        chart_data, x='Quantidade', y='Atribuir a um grupo', orientation='h',
+                        color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo",
+                        labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': ''},
+                        category_orders={'Atribuir a um grupo': group_totals.index.tolist(), 'Faixa de Antiguidade': ordem_faixas},
+                        color_discrete_map=color_map, text_auto=True
+                    )
+                    fig_stacked_bar.update_layout(height=dynamic_height, yaxis={'categoryorder':'total ascending'}, legend_title_text='Antiguidade')
+                
+                else: # Vertical
+                    fig_stacked_bar = px.bar(
+                        chart_data, x='Atribuir a um grupo', y='Quantidade',
+                        color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo",
+                        labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': 'Grupo'},
+                        category_orders={'Atribuir a um grupo': group_totals.index, 'Faixa de Antiguidade': ordem_faixas},
+                        color_discrete_map=color_map
+                    )
+                    fig_stacked_bar.update_layout(height=600, xaxis_title=None, xaxis_tickangle=45, legend_title_text='Antiguidade')
+
                 st.plotly_chart(fig_stacked_bar, use_container_width=True)
             else:
                 st.warning("Nenhum dado para gerar o report visual.")
