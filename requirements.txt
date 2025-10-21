@@ -2,5 +2,6 @@ streamlit
 pandas
 plotly
 numpy
+snowflake-connector-python
 openpyxl
-PyGithub
+Pillow
