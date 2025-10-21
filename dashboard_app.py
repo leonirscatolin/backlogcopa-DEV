@@ -408,24 +408,16 @@ try:
                 
                 orientation_choice = st.radio(
                     "Orientação do Gráfico:", ["Vertical", "Horizontal"], 
-                    index=0,  # <- Alterado para "Vertical" ser o padrão
+                    index=0,
                     horizontal=True
                 )
 
                 chart_data = df_aging.groupby(['Atribuir a um grupo', 'Faixa de Antiguidade']).size().reset_index(name='Quantidade')
-                # Totais por grupo, ordenado do maior para o menor
                 group_totals = chart_data.groupby('Atribuir a um grupo')['Quantidade'].sum().sort_values(ascending=False)
                 
-                # --- NOVO TRECHO DE CÓDIGO ---
-                # 1. Criar os novos rótulos com a contagem total (ex: "Grupo A (123)")
                 new_labels_map = {group: f"{group} ({total})" for group, total in group_totals.items()}
-                
-                # 2. Mapear os novos rótulos para o dataframe que será usado no gráfico
                 chart_data['Atribuir a um grupo'] = chart_data['Atribuir a um grupo'].map(new_labels_map)
-                
-                # 3. Criar uma lista ordenada dos novos rótulos para garantir a ordenação correta no gráfico
                 sorted_new_labels = [new_labels_map[group] for group in group_totals.index]
-                # --- FIM DO NOVO TRECHO ---
 
                 def lighten_color(hex_color, amount=0.2):
                     try:
@@ -452,11 +444,10 @@ try:
                         chart_data, x='Quantidade', y='Atribuir a um grupo', orientation='h',
                         color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo",
                         labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': ''},
-                        # Usar a nova lista de rótulos para garantir a ordenação do maior para o menor
                         category_orders={'Atribuir a um grupo': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas},
                         color_discrete_map=color_map, text_auto=True
                     )
-                    fig_stacked_bar.update_traces(textangle=0, textfont_size=12)
+                    fig_stacked_bar.update_traces(textangle=0, textfont_size=12, textfont_color='#375623')
                     fig_stacked_bar.update_layout(height=dynamic_height, legend_title_text='Antiguidade')
                 
                 else: # Vertical
@@ -464,11 +455,10 @@ try:
                         chart_data, x='Atribuir a um grupo', y='Quantidade',
                         color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo",
                         labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': 'Grupo'},
-                        # Usar a nova lista de rótulos para garantir a ordenação do maior para o menor
                         category_orders={'Atribuir a um grupo': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas},
                         color_discrete_map=color_map, text_auto=True
                     )
-                    fig_stacked_bar.update_traces(textangle=0, textfont_size=12)
+                    fig_stacked_bar.update_traces(textangle=0, textfont_size=12, textfont_color='#375623')
                     fig_stacked_bar.update_layout(height=600, xaxis_title=None, xaxis_tickangle=-45, legend_title_text='Antiguidade')
 
                 st.plotly_chart(fig_stacked_bar, use_container_width=True)
