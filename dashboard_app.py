@@ -77,18 +77,22 @@ def process_uploaded_file(uploaded_file):
     if uploaded_file is None:
         return None
     try:
-        file_buffer = BytesIO(uploaded_file.getvalue())
+        dtype_spec = {'ID do ticket': str, 'ID do Ticket': str, 'ID': str}
         if uploaded_file.name.endswith('.xlsx'):
-            df = pd.read_excel(file_buffer)
+            df = pd.read_excel(uploaded_file, dtype=dtype_spec)
         else:
-            try: df = pd.read_csv(file_buffer, delimiter=';')
-            except Exception: file_buffer.seek(0); df = pd.read_csv(file_buffer, delimiter=',')
+            try:
+                content = uploaded_file.getvalue().decode('utf-8')
+            except UnicodeDecodeError:
+                content = uploaded_file.getvalue().decode('latin1')
+            df = pd.read_csv(StringIO(content), delimiter=';', dtype=dtype_spec)
         
+        df.columns = df.columns.str.strip()
         output = StringIO()
         df.to_csv(output, index=False, sep=';', encoding='utf-8')
         return output.getvalue().encode('utf-8')
     except Exception as e:
-        st.sidebar.error(f"Erro ao processar o arquivo {uploaded_file.name}: {e}")
+        st.sidebar.error(f"Erro ao ler o arquivo {uploaded_file.name}: {e}")
         return None
 
 def processar_dados_comparativos(df_atual, df_15dias):
@@ -168,6 +172,7 @@ def sync_contacted_tickets():
     st.session_state.scroll_to_details = True
 
 # --- INÍCIO DA EXECUÇÃO DO SCRIPT ---
+st.set_page_config(layout="wide", page_title="Backlog Copa Energia + Belago", page_icon="minilogo.png", initial_sidebar_state="collapsed")
 
 st.html("""
     <style>
@@ -419,9 +424,11 @@ try:
                     colunas_para_exibir_busca = ['ID do ticket', 'Descrição', 'Dias em Aberto', 'Data de criação']
                     st.data_editor(resultados_busca[colunas_para_exibir_busca], use_container_width=True, hide_index=True, disabled=True)
 
+        # ######################## CÓDIGO DA ABA 2 ALTERADO ########################
         with tab2:
             st.subheader("Resumo do Backlog Atual")
             if not df_aging.empty:
+                # Seção dos cards de total e faixas de antiguidade
                 total_chamados = len(df_aging)
                 _, col_total_tab2, _ = st.columns([2, 1.5, 2])
                 with col_total_tab2: st.markdown( f"""<div class="metric-box"><span class="value">{total_chamados}</span><span class="label">Total de Chamados</span></div>""", unsafe_allow_html=True )
@@ -436,13 +443,26 @@ try:
                 cols_tab2 = st.columns(len(ordem_faixas_tab2))
                 for i, row in aging_counts_tab2.iterrows():
                     with cols_tab2[i]: st.markdown( f"""<div class="metric-box"><span class="value">{row['Quantidade']}</span><span class="label">{row['Faixa de Antiguidade']}</span></div>""", unsafe_allow_html=True )
+                
                 st.markdown("---")
-                st.subheader("Ofensores (Todos os Grupos)")
-                top_ofensores = df_aging['Atribuir a um grupo'].value_counts().sort_values(ascending=True)
-                fig_top_ofensores = px.bar(top_ofensores, x=top_ofensores.values, y=top_ofensores.index, orientation='h', text=top_ofensores.values, labels={'x': 'Qtd. Chamados', 'y': 'Grupo'})
-                fig_top_ofensores.update_traces(textposition='outside', marker_color='#375623')
-                fig_top_ofensores.update_layout(height=max(400, len(top_ofensores) * 25))
-                st.plotly_chart(fig_top_ofensores, use_container_width=True)
+                st.subheader("Mapa de Calor do Backlog por Grupo e Idade")
+
+                # Preparação dos dados para o heatmap
+                heatmap_data = pd.crosstab(index=df_aging['Atribuir a um grupo'], columns=df_aging['Faixa de Antiguidade'])
+                
+                # Garante que todas as colunas de idade existam, mesmo que vazias
+                heatmap_data = heatmap_data.reindex(columns=ordem_faixas, fill_value=0)
+                
+                # Cria o gráfico de mapa de calor
+                fig_heatmap = px.imshow(
+                    heatmap_data,
+                    labels=dict(x="Faixa de Antiguidade", y="Grupo", color="Qtd. Chamados"),
+                    text_auto=True,
+                    aspect="auto",
+                    color_continuous_scale='YlOrRd'
+                )
+                fig_heatmap.update_xaxes(side="top")
+                st.plotly_chart(fig_heatmap, use_container_width=True)
             else:
                 st.warning("Nenhum dado para gerar o report visual.")
 
