@@ -5,10 +5,8 @@ import numpy as np
 import base64
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
-from github import Github, Auth, GithubException
-from io import StringIO, BytesIO
+from io import StringIO
 import streamlit.components.v1 as components
-from PIL import Image
 from urllib.parse import quote
 import json
 import colorsys
@@ -20,68 +18,22 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-@st.cache_resource
-def get_github_repo():
-    try:
-        expected_repo_name = st.secrets.get("EXPECTED_REPO")
-        if not expected_repo_name:
-            st.error("Configuração de segurança incompleta. O segredo do repositório não foi encontrado.")
-            st.stop()
-
-        auth = Auth.Token(st.secrets["GITHUB_TOKEN"])
-        g = Github(auth=auth)
-        return g.get_repo(expected_repo_name)
-    except GithubException as e:
-        if e.status == 404:
-            st.error("Erro de segurança: O token não tem acesso ao repositório esperado ou o repositório não existe.")
-            st.stop()
-        st.error(f"Erro de conexão com o repositório: {e}")
-        st.stop()
-    except Exception as e:
-        st.error(f"Erro de conexão com o repositório: {e}")
-        st.stop()
-
-def update_github_file(_repo, file_path, file_content, commit_message):
-    try:
-        contents = _repo.get_contents(file_path)
-        _repo.update_file(contents.path, commit_message, file_content, contents.sha)
-        if file_path != "contacted_tickets.json":
-            st.sidebar.info(f"Arquivo '{file_path}' atualizado com sucesso.")
-    except GithubException as e:
-        if e.status == 404:
-            _repo.create_file(file_path, commit_message, file_content)
-            if file_path != "contacted_tickets.json":
-                st.sidebar.info(f"Arquivo '{file_path}' criado com sucesso.")
-        else:
-            st.sidebar.error(f"Falha ao salvar '{file_path}': {e}")
+# --- FUNÇÕES DE INTERAÇÃO COM O SNOWFLAKE ---
 
 @st.cache_data(ttl=300)
-def read_github_file(_repo, file_path):
+def read_snowflake_table(_conn, table_name):
     try:
-        content_file = _repo.get_contents(file_path)
-        content = content_file.decoded_content.decode("utf-8")
-        if not content.strip():
-            return pd.DataFrame()
-        df = pd.read_csv(StringIO(content), delimiter=';', encoding='utf-8', dtype={'ID do ticket': str, 'ID do Ticket': str})
-        df.columns = df.columns.str.strip()
+        # Usar aspas duplas para preservar maiúsculas/minúsculas, padrão do write_pandas
+        query = f'SELECT * FROM "{table_name.upper()}";'
+        df = _conn.query(query)
+        # Nomes das colunas já virão em maiúsculas do Snowflake
         return df
     except Exception as e:
-        st.error(f"Erro ao ler arquivo do GitHub '{file_path}': {e}")
+        if "does not exist" in str(e):
+            # st.warning(f"A tabela '{table_name}' ainda não existe no Snowflake. Ela será criada no próximo upload.")
+            return pd.DataFrame()
+        st.error(f"Erro ao ler a tabela '{table_name}' do Snowflake: {e}")
         return pd.DataFrame()
-
-@st.cache_data(ttl=300)
-def read_github_text_file(_repo, file_path):
-    try:
-        content_file = _repo.get_contents(file_path)
-        content = content_file.decoded_content.decode("utf-8")
-        dates = {}
-        for line in content.strip().split('\n'):
-            if ':' in line:
-                key, value = line.split(':', 1)
-                dates[key.strip()] = value.strip()
-        return dates
-    except Exception:
-        return {}
 
 def process_uploaded_file(uploaded_file):
     if uploaded_file is None:
@@ -97,18 +49,19 @@ def process_uploaded_file(uploaded_file):
                 content = uploaded_file.getvalue().decode('latin1')
             df = pd.read_csv(StringIO(content), delimiter=';', dtype=dtype_spec)
         
-        df.columns = df.columns.str.strip()
-        output = StringIO()
-        df.to_csv(output, index=False, sep=';', encoding='utf-8')
-        return output.getvalue().encode('utf-8')
+        # Padroniza os nomes das colunas para MAIÚSCULAS, padrão do Snowflake
+        df.columns = [col.strip().upper().replace(' ', '_') for col in df.columns]
+        return df
     except Exception as e:
         st.sidebar.error(f"Erro ao ler o arquivo {uploaded_file.name}: {e}")
         return None
 
+# --- FUNÇÕES DE LÓGICA DE NEGÓCIO ---
+
 def processar_dados_comparativos(df_atual, df_15dias):
-    contagem_atual = df_atual.groupby('Atribuir a um grupo').size().reset_index(name='Atual')
-    contagem_15dias = df_15dias.groupby('Atribuir a um grupo').size().reset_index(name='15 Dias Atrás')
-    df_comparativo = pd.merge(contagem_atual, contagem_15dias, on='Atribuir a um grupo', how='outer').fillna(0)
+    contagem_atual = df_atual.groupby('ATRIBUIR_A_UM_GRUPO').size().reset_index(name='Atual')
+    contagem_15dias = df_15dias.groupby('ATRIBUIR_A_UM_GRUPO').size().reset_index(name='15 Dias Atrás')
+    df_comparativo = pd.merge(contagem_atual, contagem_15dias, on='ATRIBUIR_A_UM_GRUPO', how='outer').fillna(0)
     df_comparativo['Diferença'] = df_comparativo['Atual'] - df_comparativo['15 Dias Atrás']
     df_comparativo[['Atual', '15 Dias Atrás', 'Diferença']] = df_comparativo[['Atual', '15 Dias Atrás', 'Diferença']].astype(int)
     return df_comparativo
@@ -125,31 +78,31 @@ def categorizar_idade_vetorizado(dias_series):
 
 @st.cache_data
 def analisar_aging(_df_atual):
+    if _df_atual.empty:
+        return pd.DataFrame()
     df = _df_atual.copy()
-    date_col_name = None
-    if 'Data de criação' in df.columns: date_col_name = 'Data de criação'
-    elif 'Data de Criacao' in df.columns: date_col_name = 'Data de Criacao'
+    
+    # Snowflake retorna nomes de colunas em maiúsculas
+    date_col_name = next((col for col in df.columns if col.upper() == 'DATA_DE_CRIAÇÃO' or col.upper() == 'DATA_DE_CRIACAO'), None)
 
     if not date_col_name:
+        st.warning("Coluna de data de criação não encontrada.")
         return pd.DataFrame()
 
     df[date_col_name] = pd.to_datetime(df[date_col_name], errors='coerce')
     
     linhas_invalidas = df[df[date_col_name].isna()]
     if not linhas_invalidas.empty:
-        with st.expander(f"⚠️ Atenção: {len(linhas_invalidas)} chamados foram descartados por data inválida ou vazia. Clique para ver exemplos:"):
-            st.write("Estas são algumas das linhas com datas que não puderam ser reconhecidas:")
+        with st.expander(f"⚠️ Atenção: {len(linhas_invalidas)} chamados foram descartados por data inválida ou vazia."):
             st.dataframe(linhas_invalidas.head())
     
     df.dropna(subset=[date_col_name], inplace=True)
     
     hoje = pd.to_datetime('today')
     data_criacao_normalizada = df[date_col_name].dt.normalize()
-    
     dias_calculados = (hoje - data_criacao_normalizada).dt.days
-    df['Dias em Aberto'] = (dias_calculados - 1).clip(lower=0) 
-    
-    df['Faixa de Antiguidade'] = categorizar_idade_vetorizado(df['Dias em Aberto'])
+    df['DIAS_EM_ABERTO'] = (dias_calculados - 1).clip(lower=0) 
+    df['FAIXA_DE_ANTIGUIDADE'] = categorizar_idade_vetorizado(df['DIAS_EM_ABERTO'])
     return df
 
 def get_status(row):
@@ -165,19 +118,26 @@ def get_image_as_base64(path):
     except FileNotFoundError:
         return None
 
-def sync_contacted_tickets():
+def sync_contacted_tickets(conn):
+    if 'ticket_editor' not in st.session_state or not st.session_state.ticket_editor['edited_rows']:
+        return
+
     previous_state = set(st.session_state.contacted_tickets)
     for row_index, changes in st.session_state.ticket_editor['edited_rows'].items():
-        ticket_id = st.session_state.last_filtered_df.iloc[row_index]['ID do ticket']
-        if 'Contato' in changes:
-            if changes['Contato']: st.session_state.contacted_tickets.add(ticket_id)
-            else: st.session_state.contacted_tickets.discard(ticket_id)
+        ticket_id = st.session_state.last_filtered_df.iloc[row_index]['ID_DO_TICKET']
+        if 'CONTATO' in changes:
+            if changes['CONTATO']:
+                st.session_state.contacted_tickets.add(str(ticket_id))
+            else:
+                st.session_state.contacted_tickets.discard(str(ticket_id))
 
     if previous_state != st.session_state.contacted_tickets:
-        data_to_save = list(st.session_state.contacted_tickets)
-        json_content = json.dumps(data_to_save, indent=4)
-        commit_msg = f"Atualizando tickets contatados em {datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')}"
-        update_github_file(st.session_state.repo, "contacted_tickets.json", json_content.encode('utf-8'), commit_msg)
+        df_to_save = pd.DataFrame(list(st.session_state.contacted_tickets), columns=["TICKET_ID"])
+        with conn.session() as s:
+            # Usando aspas duplas para o nome da tabela para garantir consistência
+            s.write_pandas(df_to_save, "CONTACTED_TICKETS", overwrite=True, auto_create_table=True, table_type="temp")
+            s.query('CREATE OR REPLACE TABLE "CONTACTED_TICKETS" AS SELECT * FROM "CONTACTED_TICKETS";')
+        st.toast("Status de contato salvo!", icon="✅")
     st.session_state.scroll_to_details = True
 
 @st.cache_data(ttl=3600)
