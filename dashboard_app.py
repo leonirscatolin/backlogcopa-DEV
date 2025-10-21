@@ -405,7 +405,7 @@ try:
                 st.subheader("Distribuição do Backlog por Grupo")
                 
                 orientation_choice = st.radio(
-                    "Orientação do Gráfico:", ["Vertical", "Horizontal"], index=1, horizontal=True
+                    "Orientação do Gráfico:", ["Vertical", "Horizontal"], index=0, horizontal=True
                 )
 
                 chart_data = df_aging.groupby(['Atribuir a um grupo', 'Faixa de Antiguidade']).size().reset_index(name='Quantidade')
