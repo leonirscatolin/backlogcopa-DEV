@@ -545,6 +545,13 @@ try:
                 st.info("Ainda não há dados históricos suficientes para exibir a evolução.")
                 st.info("Os dados começarão a ser coletados assim que novos arquivos de backlog forem salvos pelo administrador.")
 
-
 except Exception as e:
     st.error(f"Ocorreu um erro ao carregar os dados: {e}")
+
+# --- NOVO RODAPÉ ---
+st.markdown("---")
+st.markdown("""
+    <p style='text-align: center; color: #666; font-size: 0.9em;'>
+        Versão Beta 0.8.0 | Este dashboard está em constante desenvolvimento.
+    </p>
+""", unsafe_allow_html=True)
