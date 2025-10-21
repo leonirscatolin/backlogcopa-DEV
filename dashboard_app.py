@@ -355,66 +355,35 @@ try:
             st.markdown(f"<h3>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
             if not df_encerrados.empty:
                 df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
-                st.data_editor(
-                    df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']],
-                    hide_index=True, disabled=True, use_container_width=True
-                )
+                st.data_editor(df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']], hide_index=True, disabled=True, use_container_width=True)
             else:
                 st.info("Nenhum chamado da lista de fechados foi encontrado no backlog atual ou o arquivo de encerrados não foi carregado.")
 
             if not df_aging.empty:
                 st.markdown("---")
                 st.subheader("Detalhar e Buscar Chamados")
-                
                 st.info('A caixa "Contato" sinaliza que o contato com o usuário foi realizado e a solicitação continua pendente.')
-
                 if 'scroll_to_details' not in st.session_state:
                     st.session_state.scroll_to_details = False
-
                 if needs_scroll or st.session_state.get('scroll_to_details', False):
-                    js_code = """
-                        <script>
-                            setTimeout(() => {
-                                const element = window.parent.document.getElementById('detalhar-e-buscar-chamados');
-                                if (element) {
-                                    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }
-                            }, 250);
-                        </script>
-                    """
+                    js_code = """<script> setTimeout(() => { const element = window.parent.document.getElementById('detalhar-e-buscar-chamados'); if (element) { element.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 250); </script>"""
                     components.html(js_code, height=0)
                     st.session_state.scroll_to_details = False
-
                 st.selectbox("Selecione uma faixa de idade para ver os detalhes (ou clique em um card acima):", options=ordem_faixas, key='faixa_selecionada')
-                
                 faixa_atual = st.session_state.faixa_selecionada
                 filtered_df = df_aging[df_aging['Faixa de Antiguidade'] == faixa_atual].copy()
-                
                 if not filtered_df.empty:
                     def highlight_row(row):
                         return ['background-color: #fff8c4'] * len(row) if row['Contato'] else [''] * len(row)
-
                     filtered_df['Contato'] = filtered_df['ID do ticket'].apply(lambda id: id in st.session_state.contacted_tickets)
                     st.session_state.last_filtered_df = filtered_df.reset_index(drop=True)
-                    
                     colunas_para_exibir = ['Contato', 'ID do ticket', 'Descrição', 'Atribuir a um grupo', 'Dias em Aberto', 'Data de criação']
-
-                    st.data_editor(
-                        st.session_state.last_filtered_df[colunas_para_exibir].style.apply(highlight_row, axis=1),
-                        use_container_width=True, 
-                        hide_index=True,
-                        disabled=['ID do ticket', 'Descrição', 'Atribuir a um grupo', 'Dias em Aberto', 'Data de criação'],
-                        key='ticket_editor',
-                        on_change=sync_contacted_tickets
-                    )
+                    st.data_editor(st.session_state.last_filtered_df[colunas_para_exibir].style.apply(highlight_row, axis=1), use_container_width=True, hide_index=True, disabled=['ID do ticket', 'Descrição', 'Atribuir a um grupo', 'Dias em Aberto', 'Data de criação'], key='ticket_editor', on_change=sync_contacted_tickets)
                 else:
                     st.info("Não há chamados nesta categoria.")
-
                 st.subheader("Buscar Chamados por Grupo")
-                
                 lista_grupos = sorted(df_aging['Atribuir a um grupo'].dropna().unique())
                 grupo_selecionado = st.selectbox("Busca de chamados por grupo:", options=lista_grupos)
-                
                 if grupo_selecionado:
                     resultados_busca = df_aging[df_aging['Atribuir a um grupo'] == grupo_selecionado].copy()
                     resultados_busca['Data de criação'] = resultados_busca['Data de criação'].dt.strftime('%d/%m/%Y')
@@ -473,6 +442,8 @@ try:
                         category_orders={'Atribuir a um grupo': group_totals.index.tolist(), 'Faixa de Antiguidade': ordem_faixas},
                         color_discrete_map=color_map, text_auto=True
                     )
+                    # ######################## 1ª ALTERAÇÃO AQUI ########################
+                    fig_stacked_bar.update_traces(textangle=0)
                     fig_stacked_bar.update_layout(height=dynamic_height, yaxis={'categoryorder':'total ascending'}, legend_title_text='Antiguidade')
                 
                 else: # Vertical
@@ -481,7 +452,8 @@ try:
                         color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo",
                         labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': 'Grupo'},
                         category_orders={'Atribuir a um grupo': group_totals.index, 'Faixa de Antiguidade': ordem_faixas},
-                        color_discrete_map=color_map
+                        color_discrete_map=color_map,
+                        text_auto=True # ######################## 2ª ALTERAÇÃO AQUI ########################
                     )
                     fig_stacked_bar.update_layout(height=600, xaxis_title=None, xaxis_tickangle=45, legend_title_text='Antiguidade')
 
