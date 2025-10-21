@@ -147,7 +147,7 @@ def analisar_aging(_df_atual):
     hoje = pd.to_datetime('today').normalize()
     data_criacao_normalizada = df[date_col_name].dt.normalize()
     dias_calculados = (hoje - data_criacao_normalizada).dt.days
-    df['Dias em Aberto'] = dias_calculados
+    df['Dias em Aberto'] = (dias_calculados - 1).clip(lower=0)
     df['Faixa de Antiguidade'] = categorizar_idade_vetorizado(df['Dias em Aberto'])
     return df
 
@@ -323,7 +323,7 @@ try:
     df_aging = analisar_aging(df_atual_filtrado)
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
     with tab1:
-        info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise."]
+        info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
         if not df_encerrados.empty:
             info_messages.append(f"- **{len(df_encerrados)} chamados fechados no dia** foram deduzidos das contagens principais.")
         st.info("\n".join(info_messages))
@@ -466,4 +466,4 @@ except Exception as e:
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.3-695 | Este dashboard está em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.5-697 | Este dashboard está em desenvolvimento.</p>""", unsafe_allow_html=True)
