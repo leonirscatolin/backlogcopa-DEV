@@ -386,62 +386,61 @@ try:
                     colunas_para_exibir_busca = ['ID do ticket', 'Descrição', 'Dias em Aberto', 'Data de criação']
                     st.data_editor(resultados_busca[colunas_para_exibir_busca], use_container_width=True, hide_index=True, disabled=True)
 
-        # ######################## CÓDIGO DA ABA 2 ATUALIZADO ########################
         with tab2:
             st.subheader("Resumo do Backlog Atual")
             if not df_aging.empty:
-                # Seção dos cards de total e faixas de antiguidade
                 total_chamados = len(df_aging)
                 _, col_total_tab2, _ = st.columns([2, 1.5, 2])
                 with col_total_tab2: st.markdown( f"""<div class="metric-box"><span class="value">{total_chamados}</span><span class="label">Total de Chamados</span></div>""", unsafe_allow_html=True )
                 st.markdown("---")
-                # ... (código dos cards de faixas de antiguidade permanece o mesmo) ...
                 aging_counts_tab2 = df_aging['Faixa de Antiguidade'].value_counts().reset_index()
                 aging_counts_tab2.columns = ['Faixa de Antiguidade', 'Quantidade']
-                ordem_faixas_tab2 = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
-                todas_as_faixas_tab2 = pd.DataFrame({'Faixa de Antiguidade': ordem_faixas_tab2})
+                ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
+                todas_as_faixas_tab2 = pd.DataFrame({'Faixa de Antiguidade': ordem_faixas})
                 aging_counts_tab2 = pd.merge(todas_as_faixas_tab2, aging_counts_tab2, on='Faixa de Antiguidade', how='left').fillna(0).astype({'Quantidade': int})
-                aging_counts_tab2['Faixa de Antiguidade'] = pd.Categorical(aging_counts_tab2['Faixa de Antiguidade'], categories=ordem_faixas_tab2, ordered=True)
+                aging_counts_tab2['Faixa de Antiguidade'] = pd.Categorical(aging_counts_tab2['Faixa de Antiguidade'], categories=ordem_faixas, ordered=True)
                 aging_counts_tab2 = aging_counts_tab2.sort_values('Faixa de Antiguidade')
-                cols_tab2 = st.columns(len(ordem_faixas_tab2))
+                cols_tab2 = st.columns(len(ordem_faixas))
                 for i, row in aging_counts_tab2.iterrows():
                     with cols_tab2[i]: st.markdown( f"""<div class="metric-box"><span class="value">{row['Quantidade']}</span><span class="label">{row['Faixa de Antiguidade']}</span></div>""", unsafe_allow_html=True )
                 
                 st.markdown("---")
                 st.subheader("Distribuição do Backlog por Grupo")
 
-                # Preparação dos dados para o gráfico de barras
                 chart_data = df_aging.groupby(['Atribuir a um grupo', 'Faixa de Antiguidade']).size().reset_index(name='Quantidade')
                 
-                # Ordena os grupos pelo total de chamados para melhor visualização
                 group_totals = chart_data.groupby('Atribuir a um grupo')['Quantidade'].sum().sort_values(ascending=False)
                 
-                # Define uma ordem de cores intuitiva (de "frio" para "quente")
-                ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
+                # ######################## CÓDIGO DO GRÁFICO ATUALIZADO ########################
+                num_groups = len(group_totals)
+                dynamic_height = max(500, num_groups * 30) # Altura mínima de 500px, +30px por grupo
+
                 color_map = {
-                    "0-2 dias": "#2ca02c",  # verde
-                    "3-5 dias": "#98df8a",  # verde claro
-                    "6-10 dias": "#ff7f0e", # laranja
-                    "11-20 dias": "#ffbb78",# laranja claro
-                    "21-29 dias": "#d62728",# vermelho
-                    "30+ dias": "#ff9896"  # vermelho claro
+                    "0-2 dias": "#2ca02c", "3-5 dias": "#98df8a",
+                    "6-10 dias": "#ff7f0e", "11-20 dias": "#ffbb78",
+                    "21-29 dias": "#d62728", "30+ dias": "#ff9896"
                 }
 
-                # Cria o gráfico de barras empilhadas
                 fig_stacked_bar = px.bar(
                     chart_data,
-                    x='Atribuir a um grupo',
-                    y='Quantidade',
+                    x='Quantidade',
+                    y='Atribuir a um grupo',
+                    orientation='h', # Gráfico na horizontal para melhor leitura dos nomes
                     color='Faixa de Antiguidade',
                     title="Composição da Idade do Backlog por Grupo",
-                    labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': 'Grupo'},
+                    labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': ''},
                     category_orders={
-                        'Atribuir a um grupo': group_totals.index,
+                        'Atribuir a um grupo': group_totals.index.tolist(), # Ordena do maior para o menor
                         'Faixa de Antiguidade': ordem_faixas
                     },
-                    color_discrete_map=color_map
+                    color_discrete_map=color_map,
+                    text_auto=True # Mostra o valor dentro de cada segmento
                 )
-                fig_stacked_bar.update_layout(xaxis_title=None) # Remove o título do eixo X para não poluir
+                fig_stacked_bar.update_layout(
+                    height=dynamic_height,
+                    yaxis={'categoryorder':'total ascending'}, # Garante a ordem correta
+                    legend_title_text='Antiguidade'
+                )
                 st.plotly_chart(fig_stacked_bar, use_container_width=True)
             else:
                 st.warning("Nenhum dado para gerar o report visual.")
