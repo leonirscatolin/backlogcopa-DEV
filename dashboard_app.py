@@ -23,9 +23,20 @@ st.set_page_config(
 @st.cache_resource
 def get_github_repo():
     try:
+        expected_repo_name = st.secrets.get("EXPECTED_REPO")
+        if not expected_repo_name:
+            st.error("Configuração de segurança incompleta. O segredo do repositório não foi encontrado.")
+            st.stop()
+
         auth = Auth.Token(st.secrets["GITHUB_TOKEN"])
         g = Github(auth=auth)
-        return g.get_repo("leonirscatolin/dashboard-backlog")
+        return g.get_repo(expected_repo_name)
+    except GithubException as e:
+        if e.status == 404:
+            st.error("Erro de segurança: O token não tem acesso ao repositório esperado ou o repositório não existe.")
+            st.stop()
+        st.error(f"Erro de conexão com o repositório: {e}")
+        st.stop()
     except Exception as e:
         st.error(f"Erro de conexão com o repositório: {e}")
         st.stop()
@@ -551,6 +562,6 @@ except Exception as e:
 st.markdown("---")
 st.markdown("""
     <p style='text-align: center; color: #666; font-size: 0.9em;'>
-        v0.8.1-691 | Este dashboard está em desenvolvimento.
+        v0.9.0-692 | Este dashboard está em desenvolvimento.
     </p>
 """, unsafe_allow_html=True)
