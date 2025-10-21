@@ -1,4 +1,4 @@
-# VERSÃO 0.9.1-693 - Backend: GitHub (com correção de cache)
+# VERSÃO 0.9.2-694 - Backend: GitHub (com Aba de Evolução simplificada)
 
 import streamlit as st
 import pandas as pd
@@ -283,7 +283,6 @@ if is_admin:
                                                 f"hora_atualizacao:{hora_atualizacao}")
                     update_github_file(repo, "datas_referencia.txt", datas_referencia_content.encode('utf-8'), commit_msg)
                     
-                    # --- CORREÇÃO DE CACHE APLICADA AQUI ---
                     st.cache_data.clear()
                     st.cache_resource.clear()
 
@@ -345,11 +344,7 @@ try:
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
     
     with tab1:
-        info_messages = [
-            "**Filtros e Regras Aplicadas:**",
-            "- Grupos contendo 'RH' foram desconsiderados da análise.",
-            "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."
-        ]
+        info_messages = [ "**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)." ]
         if not df_encerrados.empty:
             info_messages.append(f"- **{len(df_encerrados)} chamados fechados no dia** foram deduzidos das contagens principais.")
         st.info("\n".join(info_messages))
@@ -407,7 +402,7 @@ try:
             if not filtered_df.empty:
                 def highlight_row(row):
                     return ['background-color: #fff8c4'] * len(row) if row['Contato'] else [''] * len(row)
-                filtered_df['Contato'] = filtered_df['ID do ticket'].apply(lambda id: id in st.session_state.contacted_tickets)
+                filtered_df['Contato'] = filtered_df['ID do ticket'].apply(lambda id: str(id) in st.session_state.contacted_tickets)
                 st.session_state.last_filtered_df = filtered_df.reset_index(drop=True)
                 colunas_para_exibir = ['Contato', 'ID do ticket', 'Descrição', 'Atribuir a um grupo', 'Dias em Aberto', 'Data de criação']
                 st.data_editor(st.session_state.last_filtered_df[colunas_para_exibir].style.apply(highlight_row, axis=1), use_container_width=True, hide_index=True, disabled=['ID do ticket', 'Descrição', 'Atribuir a um grupo', 'Dias em Aberto', 'Data de criação'], key='ticket_editor', on_change=sync_contacted_tickets)
@@ -444,11 +439,7 @@ try:
             st.markdown("---")
             st.subheader("Distribuição do Backlog por Grupo")
             
-            orientation_choice = st.radio(
-                "Orientação do Gráfico:", ["Vertical", "Horizontal"], 
-                index=0,
-                horizontal=True
-            )
+            orientation_choice = st.radio( "Orientação do Gráfico:", ["Vertical", "Horizontal"], index=0, horizontal=True )
 
             chart_data = df_aging.groupby(['Atribuir a um grupo', 'Faixa de Antiguidade']).size().reset_index(name='Quantidade')
             group_totals = chart_data.groupby('Atribuir a um grupo')['Quantidade'].sum().sort_values(ascending=False)
@@ -467,35 +458,17 @@ try:
                 except Exception: return hex_color
 
             base_color = "#375623"
-            palette = [
-                lighten_color(base_color, 0.85), lighten_color(base_color, 0.70),
-                lighten_color(base_color, 0.55), lighten_color(base_color, 0.40),
-                lighten_color(base_color, 0.20), base_color
-            ]
+            palette = [ lighten_color(base_color, 0.85), lighten_color(base_color, 0.70), lighten_color(base_color, 0.55), lighten_color(base_color, 0.40), lighten_color(base_color, 0.20), base_color ]
             color_map = {faixa: color for faixa, color in zip(ordem_faixas, palette)}
 
             if orientation_choice == 'Horizontal':
                 num_groups = len(group_totals)
                 dynamic_height = max(500, num_groups * 30)
-
-                fig_stacked_bar = px.bar(
-                    chart_data, x='Quantidade', y='Atribuir a um grupo', orientation='h',
-                    color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo",
-                    labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': ''},
-                    category_orders={'Atribuir a um grupo': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas},
-                    color_discrete_map=color_map, text_auto=True
-                )
+                fig_stacked_bar = px.bar( chart_data, x='Quantidade', y='Atribuir a um grupo', orientation='h', color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo", labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': ''}, category_orders={'Atribuir a um grupo': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas}, color_discrete_map=color_map, text_auto=True )
                 fig_stacked_bar.update_traces(textangle=0, textfont_size=12)
                 fig_stacked_bar.update_layout(height=dynamic_height, legend_title_text='Antiguidade')
-            
             else:
-                fig_stacked_bar = px.bar(
-                    chart_data, x='Atribuir a um grupo', y='Quantidade',
-                    color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo",
-                    labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': 'Grupo'},
-                    category_orders={'Atribuir a um grupo': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas},
-                    color_discrete_map=color_map, text_auto=True
-                )
+                fig_stacked_bar = px.bar( chart_data, x='Atribuir a um grupo', y='Quantidade', color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo", labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': 'Grupo'}, category_orders={'Atribuir a um grupo': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas}, color_discrete_map=color_map, text_auto=True )
                 fig_stacked_bar.update_traces(textangle=0, textfont_size=12)
                 fig_stacked_bar.update_layout(height=600, xaxis_title=None, xaxis_tickangle=-45, legend_title_text='Antiguidade')
 
@@ -504,37 +477,20 @@ try:
             st.warning("Nenhum dado para gerar o report visual.")
     
     with tab3:
-        st.subheader("Evolução do Backlog")
-        dias_evolucao = st.slider("Ver evolução dos últimos dias:", 7, 30, 7)
-        df_evolucao = carregar_dados_evolucao(repo, dias_para_analisar=dias_evolucao)
+        st.subheader("Evolução do Backlog nos Últimos 7 Dias")
+        
+        df_evolucao = carregar_dados_evolucao(repo, dias_para_analisar=7)
 
         if not df_evolucao.empty:
             todos_grupos = sorted(df_evolucao['Atribuir a um grupo'].unique())
             
-            grupos_selecionados = st.multiselect(
-                "Selecione os grupos para visualizar:",
-                options=todos_grupos,
-                default=todos_grupos
-            )
+            grupos_selecionados = st.multiselect( "Selecione os grupos para visualizar:", options=todos_grupos, default=todos_grupos )
 
             if not grupos_selecionados:
                 st.warning("Por favor, selecione pelo menos um grupo.")
             else:
                 df_filtrado = df_evolucao[df_evolucao['Atribuir a um grupo'].isin(grupos_selecionados)]
-
-                fig_evolucao = px.line(
-                    df_filtrado,
-                    x='Data',
-                    y='Total Chamados',
-                    color='Atribuir a um grupo',
-                    title='Total de Chamados Abertos por Grupo',
-                    markers=True,
-                    labels={
-                        "Data": "Data",
-                        "Total Chamados": "Nº de Chamados",
-                        "Atribuir a um grupo": "Grupo"
-                    }
-                )
+                fig_evolucao = px.line( df_filtrado, x='Data', y='Total Chamados', color='Atribuir a um grupo', title='Total de Chamados Abertos por Grupo', markers=True, labels={ "Data": "Data", "Total Chamados": "Nº de Chamados", "Atribuir a um grupo": "Grupo" } )
                 fig_evolucao.update_layout(height=600)
                 st.plotly_chart(fig_evolucao, use_container_width=True)
         else:
@@ -546,8 +502,4 @@ except Exception as e:
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""
-    <p style='text-align: center; color: #666; font-size: 0.9em;'>
-        v0.9.1-693 | Este dashboard está em desenvolvimento.
-    </p>
-""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.2-694 | Este dashboard está em desenvolvimento.</p>""", unsafe_allow_html=True)
