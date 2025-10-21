@@ -439,23 +439,23 @@ try:
                         category_orders={'Atribuir a um grupo': group_totals.index.tolist(), 'Faixa de Antiguidade': ordem_faixas},
                         color_discrete_map=color_map, text_auto=True
                     )
-                    fig_stacked_bar.update_traces(textangle=0, textfont_size=12, textposition='auto')
-                    fig_stacked_bar.update_layout(height=dynamic_height, yaxis={'categoryorder':'total ascending'}, legend_title_text='Antiguidade')
+                    fig_stacked_bar.update_traces(textangle=0, textposition='auto')
+                    fig_stacked_bar.update_layout(height=dynamic_height, yaxis={'categoryorder':'total ascending'}, legend_title_text='Antiguidade', uniformtext_minsize=12, uniformtext_mode='show')
                 
                 else: # Vertical
                     fig_stacked_bar = px.bar(
                         chart_data, x='Atribuir a um grupo', y='Quantidade',
                         color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo",
                         labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': 'Grupo'},
-                        category_orders={'Atribuir a um grupo': group_totals.index.tolist(), 'Faixa de Antiguidade': ordem_faixas},
+                        category_orders={'Atribuir a um grupo': group_totals.index.tolist()},
                         color_discrete_map=color_map, text_auto=True
                     )
-                    fig_stacked_bar.update_traces(textangle=0, textfont_size=12, textposition='auto')
-                    fig_stacked_bar.update_layout(height=600, xaxis_title=None, xaxis_tickangle=-45, legend_title_text='Antiguidade')
+                    fig_stacked_bar.update_traces(textangle=0, textposition='auto')
+                    fig_stacked_bar.update_layout(height=600, xaxis_title=None, legend_title_text='Antiguidade', uniformtext_minsize=12, uniformtext_mode='show')
 
-                st.plotly_chart(fig_stacked_bar, use_container_width=True)
-            else:
-                st.warning("Nenhum dado para gerar o report visual.")
+            st.plotly_chart(fig_stacked_bar, use_container_width=True)
+        else:
+            st.warning("Nenhum dado para gerar o report visual.")
 
 except Exception as e:
     st.error(f"Ocorreu um erro ao carregar os dados: {e}")
