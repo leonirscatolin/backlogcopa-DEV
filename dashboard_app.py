@@ -307,6 +307,7 @@ try:
         
         tab1, tab2 = st.tabs(["Dashboard Completo", "Report Visual"])
         with tab1:
+            # ... (código da tab1 permanece o mesmo)
             info_messages = [
                 "**Filtros e Regras Aplicadas:**",
                 "- Grupos contendo 'RH' foram desconsiderados da análise.",
@@ -315,11 +316,9 @@ try:
             if not df_encerrados.empty:
                 info_messages.append(f"- **{len(df_encerrados)} chamados fechados no dia** foram deduzidos das contagens principais.")
             st.info("\n".join(info_messages))
-
             st.subheader("Análise de Antiguidade do Backlog Atual")
             texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
             st.markdown(f"<p style='font-size: 0.9em; color: #666;'><i>Data de referência: {data_atual_str}{texto_hora}</i></p>", unsafe_allow_html=True)
-
             if not df_aging.empty:
                 total_chamados = len(df_aging)
                 _, col_total, _ = st.columns([2, 1.5, 2])
@@ -332,10 +331,8 @@ try:
                 aging_counts = pd.merge(todas_as_faixas, aging_counts, on='Faixa de Antiguidade', how='left').fillna(0).astype({'Quantidade': int})
                 aging_counts['Faixa de Antiguidade'] = pd.Categorical(aging_counts['Faixa de Antiguidade'], categories=ordem_faixas, ordered=True)
                 aging_counts = aging_counts.sort_values('Faixa de Antiguidade')
-
                 if 'faixa_selecionada' not in st.session_state:
                     st.session_state.faixa_selecionada = "0-2 dias"
-
                 cols = st.columns(len(ordem_faixas))
                 for i, row in aging_counts.iterrows():
                     with cols[i]:
@@ -344,79 +341,44 @@ try:
                         st.markdown(card_html, unsafe_allow_html=True)
             else:
                 st.warning("Nenhum dado válido para a análise de antiguidade.")
-            
             st.markdown(f"<h3>Comparativo de Backlog: Atual vs. 15 Dias Atrás <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_15dias_str})</span></h3>", unsafe_allow_html=True)
-            
             df_comparativo = processar_dados_comparativos(df_atual_filtrado.copy(), df_15dias_filtrado.copy())
             df_comparativo['Status'] = df_comparativo.apply(get_status, axis=1)
             df_comparativo.rename(columns={'Atribuir a um grupo': 'Grupo'}, inplace=True)
             df_comparativo = df_comparativo[['Grupo', '15 Dias Atrás', 'Atual', 'Diferença', 'Status']]
             st.dataframe(df_comparativo.set_index('Grupo').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
-
             st.markdown("---")
             st.markdown(f"<h3>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
             if not df_encerrados.empty:
                 df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
-                st.data_editor(
-                    df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']],
-                    hide_index=True, disabled=True, use_container_width=True
-                )
+                st.data_editor(df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']], hide_index=True, disabled=True, use_container_width=True)
             else:
                 st.info("Nenhum chamado da lista de fechados foi encontrado no backlog atual ou o arquivo de encerrados não foi carregado.")
-
             if not df_aging.empty:
                 st.markdown("---")
                 st.subheader("Detalhar e Buscar Chamados")
-                
                 st.info('A caixa "Contato" sinaliza que o contato com o usuário foi realizado e a solicitação continua pendente.')
-
                 if 'scroll_to_details' not in st.session_state:
                     st.session_state.scroll_to_details = False
-
                 if needs_scroll or st.session_state.get('scroll_to_details', False):
-                    js_code = """
-                        <script>
-                            setTimeout(() => {
-                                const element = window.parent.document.getElementById('detalhar-e-buscar-chamados');
-                                if (element) {
-                                    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }
-                            }, 250);
-                        </script>
-                    """
+                    js_code = """<script> setTimeout(() => { const element = window.parent.document.getElementById('detalhar-e-buscar-chamados'); if (element) { element.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 250); </script>"""
                     components.html(js_code, height=0)
                     st.session_state.scroll_to_details = False
-
                 st.selectbox("Selecione uma faixa de idade para ver os detalhes (ou clique em um card acima):", options=ordem_faixas, key='faixa_selecionada')
-                
                 faixa_atual = st.session_state.faixa_selecionada
                 filtered_df = df_aging[df_aging['Faixa de Antiguidade'] == faixa_atual].copy()
-                
                 if not filtered_df.empty:
                     def highlight_row(row):
                         return ['background-color: #fff8c4'] * len(row) if row['Contato'] else [''] * len(row)
-
                     filtered_df['Contato'] = filtered_df['ID do ticket'].apply(lambda id: id in st.session_state.contacted_tickets)
                     st.session_state.last_filtered_df = filtered_df.reset_index(drop=True)
-                    
                     colunas_para_exibir = ['Contato', 'ID do ticket', 'Descrição', 'Atribuir a um grupo', 'Dias em Aberto', 'Data de criação']
-
-                    st.data_editor(
-                        st.session_state.last_filtered_df[colunas_para_exibir].style.apply(highlight_row, axis=1),
-                        use_container_width=True, 
-                        hide_index=True,
-                        disabled=['ID do ticket', 'Descrição', 'Atribuir a um grupo', 'Dias em Aberto', 'Data de criação'],
-                        key='ticket_editor',
-                        on_change=sync_contacted_tickets
-                    )
+                    st.data_editor(st.session_state.last_filtered_df[colunas_para_exibir].style.apply(highlight_row, axis=1), use_container_width=True, hide_index=True, disabled=['ID do ticket', 'Descrição', 'Atribuir a um grupo', 'Dias em Aberto', 'Data de criação'], key='ticket_editor', on_change=sync_contacted_tickets)
                 else:
                     st.info("Não há chamados nesta categoria.")
-
                 st.subheader("Buscar Chamados por Grupo")
-                
                 lista_grupos = sorted(df_aging['Atribuir a um grupo'].dropna().unique())
                 grupo_selecionado = st.selectbox("Busca de chamados por grupo:", options=lista_grupos)
-                
                 if grupo_selecionado:
                     resultados_busca = df_aging[df_aging['Atribuir a um grupo'] == grupo_selecionado].copy()
                     resultados_busca['Data de criação'] = resultados_busca['Data de criação'].dt.strftime('%d/%m/%Y')
@@ -424,7 +386,7 @@ try:
                     colunas_para_exibir_busca = ['ID do ticket', 'Descrição', 'Dias em Aberto', 'Data de criação']
                     st.data_editor(resultados_busca[colunas_para_exibir_busca], use_container_width=True, hide_index=True, disabled=True)
 
-        # ######################## CÓDIGO DA ABA 2 ALTERADO ########################
+        # ######################## CÓDIGO DA ABA 2 ATUALIZADO ########################
         with tab2:
             st.subheader("Resumo do Backlog Atual")
             if not df_aging.empty:
@@ -433,6 +395,7 @@ try:
                 _, col_total_tab2, _ = st.columns([2, 1.5, 2])
                 with col_total_tab2: st.markdown( f"""<div class="metric-box"><span class="value">{total_chamados}</span><span class="label">Total de Chamados</span></div>""", unsafe_allow_html=True )
                 st.markdown("---")
+                # ... (código dos cards de faixas de antiguidade permanece o mesmo) ...
                 aging_counts_tab2 = df_aging['Faixa de Antiguidade'].value_counts().reset_index()
                 aging_counts_tab2.columns = ['Faixa de Antiguidade', 'Quantidade']
                 ordem_faixas_tab2 = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
@@ -445,24 +408,41 @@ try:
                     with cols_tab2[i]: st.markdown( f"""<div class="metric-box"><span class="value">{row['Quantidade']}</span><span class="label">{row['Faixa de Antiguidade']}</span></div>""", unsafe_allow_html=True )
                 
                 st.markdown("---")
-                st.subheader("Mapa de Calor do Backlog por Grupo e Idade")
+                st.subheader("Distribuição do Backlog por Grupo")
 
-                # Preparação dos dados para o heatmap
-                heatmap_data = pd.crosstab(index=df_aging['Atribuir a um grupo'], columns=df_aging['Faixa de Antiguidade'])
+                # Preparação dos dados para o gráfico de barras
+                chart_data = df_aging.groupby(['Atribuir a um grupo', 'Faixa de Antiguidade']).size().reset_index(name='Quantidade')
                 
-                # Garante que todas as colunas de idade existam, mesmo que vazias
-                heatmap_data = heatmap_data.reindex(columns=ordem_faixas, fill_value=0)
+                # Ordena os grupos pelo total de chamados para melhor visualização
+                group_totals = chart_data.groupby('Atribuir a um grupo')['Quantidade'].sum().sort_values(ascending=False)
                 
-                # Cria o gráfico de mapa de calor
-                fig_heatmap = px.imshow(
-                    heatmap_data,
-                    labels=dict(x="Faixa de Antiguidade", y="Grupo", color="Qtd. Chamados"),
-                    text_auto=True,
-                    aspect="auto",
-                    color_continuous_scale='YlOrRd'
+                # Define uma ordem de cores intuitiva (de "frio" para "quente")
+                ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
+                color_map = {
+                    "0-2 dias": "#2ca02c",  # verde
+                    "3-5 dias": "#98df8a",  # verde claro
+                    "6-10 dias": "#ff7f0e", # laranja
+                    "11-20 dias": "#ffbb78",# laranja claro
+                    "21-29 dias": "#d62728",# vermelho
+                    "30+ dias": "#ff9896"  # vermelho claro
+                }
+
+                # Cria o gráfico de barras empilhadas
+                fig_stacked_bar = px.bar(
+                    chart_data,
+                    x='Atribuir a um grupo',
+                    y='Quantidade',
+                    color='Faixa de Antiguidade',
+                    title="Composição da Idade do Backlog por Grupo",
+                    labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': 'Grupo'},
+                    category_orders={
+                        'Atribuir a um grupo': group_totals.index,
+                        'Faixa de Antiguidade': ordem_faixas
+                    },
+                    color_discrete_map=color_map
                 )
-                fig_heatmap.update_xaxes(side="top")
-                st.plotly_chart(fig_heatmap, use_container_width=True)
+                fig_stacked_bar.update_layout(xaxis_title=None) # Remove o título do eixo X para não poluir
+                st.plotly_chart(fig_stacked_bar, use_container_width=True)
             else:
                 st.warning("Nenhum dado para gerar o report visual.")
 
