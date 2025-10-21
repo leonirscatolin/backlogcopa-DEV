@@ -169,6 +169,47 @@ def sync_contacted_tickets():
         update_github_file(st.session_state.repo, "contacted_tickets.json", json_content.encode('utf-8'), commit_msg)
     st.session_state.scroll_to_details = True
 
+@st.cache_data(ttl=3600)
+def carregar_dados_evolucao(_repo, dias_para_analisar=7):
+    try:
+        all_files = _repo.get_contents("snapshots")
+        df_evolucao_list = []
+        
+        end_date = date.today()
+        start_date = end_date - timedelta(days=dias_para_analisar - 1)
+
+        for content_file in all_files:
+            file_name = content_file.path
+            if file_name.startswith("snapshots/backlog_") and file_name.endswith(".csv"):
+                try:
+                    date_str = file_name.replace("snapshots/backlog_", "").replace(".csv", "")
+                    file_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+                    if start_date <= file_date <= end_date:
+                        df_snapshot = read_github_file(_repo, file_name)
+                        if not df_snapshot.empty and 'Atribuir a um grupo' in df_snapshot.columns:
+                            df_snapshot_filtrado = df_snapshot[~df_snapshot['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
+                            contagem_diaria = df_snapshot_filtrado.groupby('Atribuir a um grupo').size().reset_index(name='Total Chamados')
+                            contagem_diaria['Data'] = pd.to_datetime(file_date)
+                            df_evolucao_list.append(contagem_diaria)
+                except ValueError:
+                    continue
+
+        if not df_evolucao_list:
+            return pd.DataFrame()
+
+        df_consolidado = pd.concat(df_evolucao_list, ignore_index=True)
+        return df_consolidado.sort_values(by=['Data', 'Atribuir a um grupo'])
+
+    except GithubException as e:
+        if e.status == 404:
+            return pd.DataFrame()
+        st.warning(f"Não foi possível carregar o histórico de snapshots: {e}")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Ocorreu um erro inesperado ao carregar dados de evolução: {e}")
+        return pd.DataFrame()
+
 st.html("""
     <style>
         #GithubIcon { visibility: hidden; }
@@ -212,7 +253,8 @@ if is_admin:
     if st.sidebar.button("Salvar Novos Dados no Site"):
         if uploaded_file_atual and uploaded_file_15dias:
             with st.spinner("Processando e salvando arquivos..."):
-                commit_msg = f"Dados atualizados em {datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')}"
+                now_sao_paulo = datetime.now(ZoneInfo('America/Sao_Paulo'))
+                commit_msg = f"Dados atualizados em {now_sao_paulo.strftime('%d/%m/%Y %H:%M')}"
                 
                 content_atual = process_uploaded_file(uploaded_file_atual)
                 content_15dias = process_uploaded_file(uploaded_file_15dias)
@@ -222,6 +264,10 @@ if is_admin:
                     update_github_file(repo, "dados_atuais.csv", content_atual, commit_msg)
                     update_github_file(repo, "dados_15_dias.csv", content_15dias, commit_msg)
                     
+                    today_str = now_sao_paulo.strftime('%Y-%m-%d')
+                    snapshot_path = f"snapshots/backlog_{today_str}.csv"
+                    update_github_file(repo, snapshot_path, content_atual, f"Snapshot de {today_str}")
+
                     if content_fechados is not None:
                         update_github_file(repo, "dados_fechados.csv", content_fechados, commit_msg)
                     else:
@@ -229,8 +275,7 @@ if is_admin:
 
                     data_do_upload = date.today()
                     data_arquivo_15dias = data_do_upload - timedelta(days=15) 
-                    agora_correta = datetime.now(ZoneInfo("America/Sao_Paulo"))
-                    hora_atualizacao = agora_correta.strftime('%H:%M')
+                    hora_atualizacao = now_sao_paulo.strftime('%H:%M')
                     
                     datas_referencia_content = (
                         f"data_atual:{data_do_upload.strftime('%d/%m/%Y')}\n" 
@@ -241,6 +286,7 @@ if is_admin:
 
                     read_github_file.clear()
                     read_github_text_file.clear()
+                    carregar_dados_evolucao.clear()
                     st.sidebar.success("Arquivos salvos! Forçando recarregamento...")
                     st.rerun()
         else:
@@ -300,7 +346,8 @@ try:
         
         df_aging = analisar_aging(df_atual_filtrado)
         
-        tab1, tab2 = st.tabs(["Dashboard Completo", "Report Visual"])
+        tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
+        
         with tab1:
             info_messages = [
                 "**Filtros e Regras Aplicadas:**",
@@ -459,6 +506,45 @@ try:
                 st.plotly_chart(fig_stacked_bar, use_container_width=True)
             else:
                 st.warning("Nenhum dado para gerar o report visual.")
+        
+        with tab3:
+            st.subheader("Evolução do Backlog nos Últimos 7 Dias")
+
+            df_evolucao = carregar_dados_evolucao(repo, dias_para_analisar=7)
+
+            if not df_evolucao.empty:
+                todos_grupos = sorted(df_evolucao['Atribuir a um grupo'].unique())
+                
+                grupos_selecionados = st.multiselect(
+                    "Selecione os grupos para visualizar:",
+                    options=todos_grupos,
+                    default=todos_grupos
+                )
+
+                if not grupos_selecionados:
+                    st.warning("Por favor, selecione pelo menos um grupo.")
+                else:
+                    df_filtrado = df_evolucao[df_evolucao['Atribuir a um grupo'].isin(grupos_selecionados)]
+
+                    fig_evolucao = px.line(
+                        df_filtrado,
+                        x='Data',
+                        y='Total Chamados',
+                        color='Atribuir a um grupo',
+                        title='Total de Chamados Abertos por Grupo',
+                        markers=True,
+                        labels={
+                            "Data": "Data",
+                            "Total Chamados": "Nº de Chamados",
+                            "Atribuir a um grupo": "Grupo"
+                        }
+                    )
+                    fig_evolucao.update_layout(height=600)
+                    st.plotly_chart(fig_evolucao, use_container_width=True)
+            else:
+                st.info("Ainda não há dados históricos suficientes para exibir a evolução.")
+                st.info("Os dados começarão a ser coletados assim que novos arquivos de backlog forem salvos pelo administrador.")
+
 
 except Exception as e:
     st.error(f"Ocorreu um erro ao carregar os dados: {e}")
