@@ -11,6 +11,7 @@ import streamlit.components.v1 as components
 from PIL import Image
 from urllib.parse import quote
 import json
+import colorsys
 
 # --- Configuração da Página ---
 st.set_page_config(
@@ -121,7 +122,6 @@ def analisar_aging(_df_atual):
     elif 'Data de Criacao' in df.columns: date_col_name = 'Data de Criacao'
 
     if not date_col_name:
-        # st.error("Nenhuma coluna de data ('Data de criação' ou 'Data de Criacao') foi encontrada no arquivo.")
         return pd.DataFrame()
 
     df[date_col_name] = pd.to_datetime(df[date_col_name], errors='coerce')
@@ -313,11 +313,9 @@ try:
             if not df_encerrados.empty:
                 info_messages.append(f"- **{len(df_encerrados)} chamados fechados no dia** foram deduzidos das contagens principais.")
             st.info("\n".join(info_messages))
-
             st.subheader("Análise de Antiguidade do Backlog Atual")
             texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
             st.markdown(f"<p style='font-size: 0.9em; color: #666;'><i>Data de referência: {data_atual_str}{texto_hora}</i></p>", unsafe_allow_html=True)
-
             if not df_aging.empty:
                 total_chamados = len(df_aging)
                 _, col_total, _ = st.columns([2, 1.5, 2])
@@ -330,10 +328,8 @@ try:
                 aging_counts = pd.merge(todas_as_faixas, aging_counts, on='Faixa de Antiguidade', how='left').fillna(0).astype({'Quantidade': int})
                 aging_counts['Faixa de Antiguidade'] = pd.Categorical(aging_counts['Faixa de Antiguidade'], categories=ordem_faixas, ordered=True)
                 aging_counts = aging_counts.sort_values('Faixa de Antiguidade')
-
                 if 'faixa_selecionada' not in st.session_state:
                     st.session_state.faixa_selecionada = "0-2 dias"
-
                 cols = st.columns(len(ordem_faixas))
                 for i, row in aging_counts.iterrows():
                     with cols[i]:
@@ -342,15 +338,12 @@ try:
                         st.markdown(card_html, unsafe_allow_html=True)
             else:
                 st.warning("Nenhum dado válido para a análise de antiguidade.")
-            
             st.markdown(f"<h3>Comparativo de Backlog: Atual vs. 15 Dias Atrás <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_15dias_str})</span></h3>", unsafe_allow_html=True)
-            
             df_comparativo = processar_dados_comparativos(df_atual_filtrado.copy(), df_15dias_filtrado.copy())
             df_comparativo['Status'] = df_comparativo.apply(get_status, axis=1)
             df_comparativo.rename(columns={'Atribuir a um grupo': 'Grupo'}, inplace=True)
             df_comparativo = df_comparativo[['Grupo', '15 Dias Atrás', 'Atual', 'Diferença', 'Status']]
             st.dataframe(df_comparativo.set_index('Grupo').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
-
             st.markdown("---")
             st.markdown(f"<h3>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
             if not df_encerrados.empty:
@@ -358,7 +351,6 @@ try:
                 st.data_editor(df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']], hide_index=True, disabled=True, use_container_width=True)
             else:
                 st.info("Nenhum chamado da lista de fechados foi encontrado no backlog atual ou o arquivo de encerrados não foi carregado.")
-
             if not df_aging.empty:
                 st.markdown("---")
                 st.subheader("Detalhar e Buscar Chamados")
@@ -442,7 +434,6 @@ try:
                         category_orders={'Atribuir a um grupo': group_totals.index.tolist(), 'Faixa de Antiguidade': ordem_faixas},
                         color_discrete_map=color_map, text_auto=True
                     )
-                    # ######################## 1ª ALTERAÇÃO AQUI ########################
                     fig_stacked_bar.update_traces(textangle=0)
                     fig_stacked_bar.update_layout(height=dynamic_height, yaxis={'categoryorder':'total ascending'}, legend_title_text='Antiguidade')
                 
@@ -453,7 +444,7 @@ try:
                         labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': 'Grupo'},
                         category_orders={'Atribuir a um grupo': group_totals.index, 'Faixa de Antiguidade': ordem_faixas},
                         color_discrete_map=color_map,
-                        text_auto=True # ######################## 2ª ALTERAÇÃO AQUI ########################
+                        text_auto=True
                     )
                     fig_stacked_bar.update_layout(height=600, xaxis_title=None, xaxis_tickangle=45, legend_title_text='Antiguidade')
 
