@@ -3,5 +3,6 @@ pandas
 plotly
 numpy
 snowflake-connector-python
+snowflake-snowpark-python
 openpyxl
 Pillow
