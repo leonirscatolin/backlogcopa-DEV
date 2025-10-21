@@ -304,7 +304,6 @@ try:
         df_aging = analisar_aging(df_atual_filtrado)
         
         tab1, tab2 = st.tabs(["Dashboard Completo", "Report Visual"])
-        
         with tab1:
             info_messages = [
                 "**Filtros e Regras Aplicadas:**",
@@ -314,11 +313,9 @@ try:
             if not df_encerrados.empty:
                 info_messages.append(f"- **{len(df_encerrados)} chamados fechados no dia** foram deduzidos das contagens principais.")
             st.info("\n".join(info_messages))
-
             st.subheader("Análise de Antiguidade do Backlog Atual")
             texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
             st.markdown(f"<p style='font-size: 0.9em; color: #666;'><i>Data de referência: {data_atual_str}{texto_hora}</i></p>", unsafe_allow_html=True)
-            
             if not df_aging.empty:
                 total_chamados = len(df_aging)
                 _, col_total, _ = st.columns([2, 1.5, 2])
@@ -331,10 +328,8 @@ try:
                 aging_counts = pd.merge(todas_as_faixas, aging_counts, on='Faixa de Antiguidade', how='left').fillna(0).astype({'Quantidade': int})
                 aging_counts['Faixa de Antiguidade'] = pd.Categorical(aging_counts['Faixa de Antiguidade'], categories=ordem_faixas, ordered=True)
                 aging_counts = aging_counts.sort_values('Faixa de Antiguidade')
-
                 if 'faixa_selecionada' not in st.session_state:
                     st.session_state.faixa_selecionada = "0-2 dias"
-
                 cols = st.columns(len(ordem_faixas))
                 for i, row in aging_counts.iterrows():
                     with cols[i]:
@@ -343,14 +338,12 @@ try:
                         st.markdown(card_html, unsafe_allow_html=True)
             else:
                 st.warning("Nenhum dado válido para a análise de antiguidade.")
-            
             st.markdown(f"<h3>Comparativo de Backlog: Atual vs. 15 Dias Atrás <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_15dias_str})</span></h3>", unsafe_allow_html=True)
             df_comparativo = processar_dados_comparativos(df_atual_filtrado.copy(), df_15dias_filtrado.copy())
             df_comparativo['Status'] = df_comparativo.apply(get_status, axis=1)
             df_comparativo.rename(columns={'Atribuir a um grupo': 'Grupo'}, inplace=True)
             df_comparativo = df_comparativo[['Grupo', '15 Dias Atrás', 'Atual', 'Diferença', 'Status']]
             st.dataframe(df_comparativo.set_index('Grupo').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
-
             st.markdown("---")
             st.markdown(f"<h3>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
             if not df_encerrados.empty:
@@ -358,7 +351,6 @@ try:
                 st.data_editor(df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']], hide_index=True, disabled=True, use_container_width=True)
             else:
                 st.info("Nenhum chamado da lista de fechados foi encontrado no backlog atual ou o arquivo de encerrados não foi carregado.")
-
             if not df_aging.empty:
                 st.markdown("---")
                 st.subheader("Detalhar e Buscar Chamados")
@@ -447,23 +439,23 @@ try:
                         category_orders={'Atribuir a um grupo': group_totals.index.tolist(), 'Faixa de Antiguidade': ordem_faixas},
                         color_discrete_map=color_map, text_auto=True
                     )
-                    fig_stacked_bar.update_traces(textangle=0, textposition='auto')
-                    fig_stacked_bar.update_layout(height=dynamic_height, yaxis={'categoryorder':'total ascending'}, legend_title_text='Antiguidade', uniformtext_minsize=12, uniformtext_mode='show')
+                    fig_stacked_bar.update_traces(textangle=0, textfont_size=12)
+                    fig_stacked_bar.update_layout(height=dynamic_height, yaxis={'categoryorder':'total ascending'}, legend_title_text='Antiguidade')
                 
                 else: # Vertical
                     fig_stacked_bar = px.bar(
                         chart_data, x='Atribuir a um grupo', y='Quantidade',
                         color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo",
                         labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': 'Grupo'},
-                        category_orders={'Atribuir a um grupo': group_totals.index.tolist()},
+                        category_orders={'Atribuir a um grupo': group_totals.index.tolist(), 'Faixa de Antiguidade': ordem_faixas},
                         color_discrete_map=color_map, text_auto=True
                     )
-                    fig_stacked_bar.update_traces(textangle=0, textposition='auto')
-                    fig_stacked_bar.update_layout(height=600, xaxis_title=None, legend_title_text='Antiguidade', uniformtext_minsize=12, uniformtext_mode='show')
+                    fig_stacked_bar.update_traces(textangle=0, textfont_size=12)
+                    fig_stacked_bar.update_layout(height=600, xaxis_title=None, xaxis_tickangle=-45, legend_title_text='Antiguidade')
 
-            st.plotly_chart(fig_stacked_bar, use_container_width=True)
-        else:
-            st.warning("Nenhum dado para gerar o report visual.")
+                st.plotly_chart(fig_stacked_bar, use_container_width=True)
+            else:
+                st.warning("Nenhum dado para gerar o report visual.")
 
 except Exception as e:
     st.error(f"Ocorreu um erro ao carregar os dados: {e}")
