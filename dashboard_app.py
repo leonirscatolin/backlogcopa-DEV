@@ -383,13 +383,14 @@ try:
                     colunas_para_exibir_busca = ['ID do ticket', 'Descrição', 'Dias em Aberto', 'Data de criação']
                     st.data_editor(resultados_busca[colunas_para_exibir_busca], use_container_width=True, hide_index=True, disabled=True)
 
-        with tab2:
+with tab2:
             st.subheader("Resumo do Backlog Atual")
             if not df_aging.empty:
                 total_chamados = len(df_aging)
                 _, col_total_tab2, _ = st.columns([2, 1.5, 2])
                 with col_total_tab2: st.markdown( f"""<div class="metric-box"><span class="value">{total_chamados}</span><span class="label">Total de Chamados</span></div>""", unsafe_allow_html=True )
                 st.markdown("---")
+                
                 aging_counts_tab2 = df_aging['Faixa de Antiguidade'].value_counts().reset_index()
                 aging_counts_tab2.columns = ['Faixa de Antiguidade', 'Quantidade']
                 ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
@@ -397,6 +398,7 @@ try:
                 aging_counts_tab2 = pd.merge(todas_as_faixas_tab2, aging_counts_tab2, on='Faixa de Antiguidade', how='left').fillna(0).astype({'Quantidade': int})
                 aging_counts_tab2['Faixa de Antiguidade'] = pd.Categorical(aging_counts_tab2['Faixa de Antiguidade'], categories=ordem_faixas, ordered=True)
                 aging_counts_tab2 = aging_counts_tab2.sort_values('Faixa de Antiguidade')
+                
                 cols_tab2 = st.columns(len(ordem_faixas))
                 for i, row in aging_counts_tab2.iterrows():
                     with cols_tab2[i]: st.markdown( f"""<div class="metric-box"><span class="value">{row['Quantidade']}</span><span class="label">{row['Faixa de Antiguidade']}</span></div>""", unsafe_allow_html=True )
@@ -405,12 +407,26 @@ try:
                 st.subheader("Distribuição do Backlog por Grupo")
                 
                 orientation_choice = st.radio(
-                    "Orientação do Gráfico:", ["Vertical", "Horizontal"], index=0, horizontal=True
+                    "Orientação do Gráfico:", ["Vertical", "Horizontal"], 
+                    index=0,  # <- Alterado para "Vertical" ser o padrão
+                    horizontal=True
                 )
 
                 chart_data = df_aging.groupby(['Atribuir a um grupo', 'Faixa de Antiguidade']).size().reset_index(name='Quantidade')
+                # Totais por grupo, ordenado do maior para o menor
                 group_totals = chart_data.groupby('Atribuir a um grupo')['Quantidade'].sum().sort_values(ascending=False)
                 
+                # --- NOVO TRECHO DE CÓDIGO ---
+                # 1. Criar os novos rótulos com a contagem total (ex: "Grupo A (123)")
+                new_labels_map = {group: f"{group} ({total})" for group, total in group_totals.items()}
+                
+                # 2. Mapear os novos rótulos para o dataframe que será usado no gráfico
+                chart_data['Atribuir a um grupo'] = chart_data['Atribuir a um grupo'].map(new_labels_map)
+                
+                # 3. Criar uma lista ordenada dos novos rótulos para garantir a ordenação correta no gráfico
+                sorted_new_labels = [new_labels_map[group] for group in group_totals.index]
+                # --- FIM DO NOVO TRECHO ---
+
                 def lighten_color(hex_color, amount=0.2):
                     try:
                         hex_color = hex_color.lstrip('#')
@@ -436,18 +452,20 @@ try:
                         chart_data, x='Quantidade', y='Atribuir a um grupo', orientation='h',
                         color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo",
                         labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': ''},
-                        category_orders={'Atribuir a um grupo': group_totals.index.tolist(), 'Faixa de Antiguidade': ordem_faixas},
+                        # Usar a nova lista de rótulos para garantir a ordenação do maior para o menor
+                        category_orders={'Atribuir a um grupo': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas},
                         color_discrete_map=color_map, text_auto=True
                     )
                     fig_stacked_bar.update_traces(textangle=0, textfont_size=12)
-                    fig_stacked_bar.update_layout(height=dynamic_height, yaxis={'categoryorder':'total ascending'}, legend_title_text='Antiguidade')
+                    fig_stacked_bar.update_layout(height=dynamic_height, legend_title_text='Antiguidade')
                 
                 else: # Vertical
                     fig_stacked_bar = px.bar(
                         chart_data, x='Atribuir a um grupo', y='Quantidade',
                         color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo",
                         labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo': 'Grupo'},
-                        category_orders={'Atribuir a um grupo': group_totals.index.tolist(), 'Faixa de Antiguidade': ordem_faixas},
+                        # Usar a nova lista de rótulos para garantir a ordenação do maior para o menor
+                        category_orders={'Atribuir a um grupo': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas},
                         color_discrete_map=color_map, text_auto=True
                     )
                     fig_stacked_bar.update_traces(textangle=0, textfont_size=12)
