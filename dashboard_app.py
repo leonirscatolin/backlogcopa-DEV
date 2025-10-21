@@ -91,6 +91,14 @@ def process_uploaded_file(uploaded_file):
         st.sidebar.error(f"Erro ao processar o arquivo {uploaded_file.name}: {e}")
         return None
 
+def processar_dados_comparativos(df_atual, df_15dias):
+    contagem_atual = df_atual.groupby('Atribuir a um grupo').size().reset_index(name='Atual')
+    contagem_15dias = df_15dias.groupby('Atribuir a um grupo').size().reset_index(name='15 Dias Atrás')
+    df_comparativo = pd.merge(contagem_atual, contagem_15dias, on='Atribuir a um grupo', how='outer').fillna(0)
+    df_comparativo['Diferença'] = df_comparativo['Atual'] - df_comparativo['15 Dias Atrás']
+    df_comparativo[['Atual', '15 Dias Atrás', 'Diferença']] = df_comparativo[['Atual', '15 Dias Atrás', 'Diferença']].astype(int)
+    return df_comparativo
+
 @st.cache_data
 def categorizar_idade_vetorizado(dias_series):
     condicoes = [
@@ -158,14 +166,6 @@ def sync_contacted_tickets():
         commit_msg = f"Atualizando tickets contatados em {datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')}"
         update_github_file(st.session_state.repo, "contacted_tickets.json", json_content.encode('utf-8'), commit_msg)
     st.session_state.scroll_to_details = True
-    
-def processar_dados_comparativos(df_atual, df_15dias):
-    contagem_atual = df_atual.groupby('Atribuir a um grupo').size().reset_index(name='Atual')
-    contagem_15dias = df_15dias.groupby('Atribuir a um grupo').size().reset_index(name='15 Dias Atrás')
-    df_comparativo = pd.merge(contagem_atual, contagem_15dias, on='Atribuir a um grupo', how='outer').fillna(0)
-    df_comparativo['Diferença'] = df_comparativo['Atual'] - df_comparativo['15 Dias Atrás']
-    df_comparativo[['Atual', '15 Dias Atrás', 'Diferença']] = df_comparativo[['Atual', '15 Dias Atrás', 'Diferença']].astype(int)
-    return df_comparativo
 
 # --- INÍCIO DA EXECUÇÃO DO SCRIPT ---
 
@@ -242,7 +242,7 @@ if is_admin:
                     read_github_file.clear()
                     read_github_text_file.clear()
                     st.sidebar.success("Arquivos salvos! Forçando recarregamento...")
-                    st.experimental_rerun()
+                    st.rerun()
         else:
             st.sidebar.warning("Carregue os arquivos obrigatórios (Atual e 15 Dias) para salvar.")
 elif password:
