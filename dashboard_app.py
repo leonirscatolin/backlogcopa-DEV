@@ -1,3 +1,5 @@
+# VERSÃO 0.9.6-698 - Backend: GitHub (Slider re-adicionado na Aba 3)
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -446,11 +448,12 @@ try:
         else:
             st.warning("Nenhum dado para gerar o report visual.")
     with tab3:
-        st.subheader("Evolução do Backlog nos Últimos 7 Dias")
-        df_evolucao = carregar_dados_evolucao(repo, dias_para_analisar=7)
+        st.subheader("Evolução do Backlog")
+        dias_evolucao = st.slider("Ver evolução dos últimos dias:", min_value=7, max_value=30, value=7, key="slider_evolucao")
+        df_evolucao = carregar_dados_evolucao(repo, dias_para_analisar=dias_evolucao)
         if not df_evolucao.empty:
             todos_grupos = sorted(df_evolucao['Atribuir a um grupo'].unique())
-            grupos_selecionados = st.multiselect( "Selecione os grupos para visualizar:", options=todos_grupos, default=todos_grupos )
+            grupos_selecionados = st.multiselect( "Selecione os grupos para visualizar:", options=todos_grupos, default=todos_grupos, key="select_evolucao_grupos" )
             if not grupos_selecionados:
                 st.warning("Por favor, selecione pelo menos um grupo.")
             else:
@@ -466,4 +469,4 @@ except Exception as e:
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.5-697 | Este dashboard está em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.6-698 | Este dashboard está em desenvolvimento.</p>""", unsafe_allow_html=True)
