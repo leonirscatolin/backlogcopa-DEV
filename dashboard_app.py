@@ -1,5 +1,3 @@
-# VERSÃO 0.9.9-701 - Backend: GitHub (Texto 'Atribuir a um grupo' alterado)
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -157,7 +155,7 @@ def analisar_aging(_df_atual):
     linhas_invalidas = df[df[date_col_name].isna()]
     if not linhas_invalidas.empty:
         with st.expander(f"⚠️ Atenção: {len(linhas_invalidas)} chamados descartados."):
-            st.dataframe(linhas_invalidas.head())
+             st.dataframe(linhas_invalidas.head())
     df.dropna(subset=[date_col_name], inplace=True)
     hoje = pd.to_datetime('today').normalize()
     data_criacao_normalizada = df[date_col_name].dt.normalize()
@@ -344,12 +342,12 @@ try:
     df_aging = analisar_aging(df_atual_filtrado)
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
     with tab1:
-        info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados.", "- Contagem de dias desconsidera o dia da abertura (prazo -1 dia)."]
-        if not df_encerrados.empty: info_messages.append(f"- **{len(df_encerrados)} chamados fechados** deduzidos das contagens.")
+        info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
+        if not df_encerrados.empty: info_messages.append(f"- **{len(df_encerrados)} chamados fechados no dia** foram deduzidos das contagens principais.")
         st.info("\n".join(info_messages))
         st.subheader("Análise de Antiguidade do Backlog Atual")
-        texto_hora = f" (às {hora_atualizacao_str})" if hora_atualizacao_str else ""
-        st.markdown(f"<p style='font-size: 0.9em; color: #666;'><i>Ref: {data_atual_str}{texto_hora}</i></p>", unsafe_allow_html=True)
+        texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
+        st.markdown(f"<p style='font-size: 0.9em; color: #666;'><i>Data de referência: {data_atual_str}{texto_hora}</i></p>", unsafe_allow_html=True)
         if not df_aging.empty:
             total_chamados = len(df_aging)
             _, col_total, _ = st.columns([2, 1.5, 2])
@@ -373,21 +371,20 @@ try:
         st.markdown(f"<h3>Comparativo de Backlog: Atual vs. 15 Dias Atrás <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_15dias_str})</span></h3>", unsafe_allow_html=True)
         df_comparativo = processar_dados_comparativos(df_atual_filtrado.copy(), df_15dias_filtrado.copy())
         df_comparativo['Status'] = df_comparativo.apply(get_status, axis=1)
-        df_comparativo.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'}, inplace=True) # Renomeia aqui
+        df_comparativo.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'}, inplace=True)
         df_comparativo = df_comparativo[['Grupo Atribuído', '15 Dias Atrás', 'Atual', 'Diferença', 'Status']]
         st.dataframe(df_comparativo.set_index('Grupo Atribuído').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
         st.markdown("---")
         st.markdown(f"<h3>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
         if not df_encerrados.empty:
             df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
-            # Renomeia para exibição
             df_encerrados_display = df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']].rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
             st.data_editor(df_encerrados_display, hide_index=True, disabled=True, use_container_width=True)
-        else: st.info("Nenhum chamado fechado encontrado ou arquivo não carregado.")
+        else: st.info("Arquivo não carregado.")
         if not df_aging.empty:
             st.markdown("---")
             st.subheader("Detalhar e Buscar Chamados")
-            st.info('Marque "Contato" se já falou com o usuário. Use "Observações" para anotações.')
+            st.info('Marque "Contato" se já falou com o usuário e a solicitação continua pendente. Use "Observações" para anotações.')
             if 'scroll_to_details' not in st.session_state: st.session_state.scroll_to_details = False
             if needs_scroll or st.session_state.get('scroll_to_details', False):
                 js_code = """<script> setTimeout(() => { const element = window.parent.document.getElementById('detalhar-e-buscar-chamados'); if (element) { element.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 250); </script>"""
@@ -402,13 +399,12 @@ try:
                 filtered_df['Contato'] = filtered_df['ID do ticket'].apply(lambda id: str(id) in st.session_state.contacted_tickets)
                 filtered_df['Observações'] = filtered_df['ID do ticket'].apply(lambda id: st.session_state.observations.get(str(id), ''))
                 st.session_state.last_filtered_df = filtered_df.reset_index(drop=True)
-                # Renomeia para exibição no editor
                 colunas_para_exibir_renomeadas = {'Contato': 'Contato', 'ID do ticket': 'ID do ticket', 'Descrição': 'Descrição', 'Atribuir a um grupo': 'Grupo Atribuído', 'Dias em Aberto': 'Dias em Aberto', 'Data de criação': 'Data de criação', 'Observações': 'Observações'}
                 st.data_editor(st.session_state.last_filtered_df.rename(columns=colunas_para_exibir_renomeadas)[list(colunas_para_exibir_renomeadas.values())].style.apply(highlight_row, axis=1), use_container_width=True, hide_index=True, disabled=['ID do ticket', 'Descrição', 'Grupo Atribuído', 'Dias em Aberto', 'Data de criação'], key='ticket_editor', on_change=sync_ticket_data)
             else: st.info("Não há chamados nesta categoria.")
             st.subheader("Buscar Chamados por Grupo")
             lista_grupos = sorted(df_aging['Atribuir a um grupo'].dropna().unique())
-            grupo_selecionado = st.selectbox("Busca por grupo:", options=lista_grupos) # Label alterado aqui também
+            grupo_selecionado = st.selectbox("Busca por grupo:", options=lista_grupos)
             if grupo_selecionado:
                 resultados_busca = df_aging[df_aging['Atribuir a um grupo'] == grupo_selecionado].copy()
                 if 'Data de criação' in resultados_busca.columns:
@@ -439,7 +435,7 @@ try:
             chart_data = df_aging.groupby(['Atribuir a um grupo', 'Faixa de Antiguidade']).size().reset_index(name='Quantidade')
             group_totals = chart_data.groupby('Atribuir a um grupo')['Quantidade'].sum().sort_values(ascending=False)
             new_labels_map = {group: f"{group} ({total})" for group, total in group_totals.items()}
-            chart_data['Grupo Atribuído'] = chart_data['Atribuir a um grupo'].map(new_labels_map) # Cria coluna com nome novo para o gráfico
+            chart_data['Grupo Atribuído'] = chart_data['Atribuir a um grupo'].map(new_labels_map)
             sorted_new_labels = [new_labels_map[group] for group in group_totals.index]
             def lighten_color(hex_color, amount=0.2):
                 try:
@@ -476,7 +472,6 @@ try:
                 st.warning("Selecione pelo menos um grupo.")
             else:
                 df_filtrado = df_evolucao[df_evolucao['Atribuir a um grupo'].isin(grupos_selecionados)]
-                # Renomeia para exibição no gráfico
                 df_filtrado_display = df_filtrado.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
                 fig_evolucao = px.line( df_filtrado_display, x='Data', y='Total Chamados', color='Grupo Atribuído', title='Total de Chamados Abertos por Grupo', markers=True, labels={ "Data": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" } )
                 fig_evolucao.update_layout(height=600)
@@ -487,4 +482,4 @@ except Exception as e:
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.9-701 | Em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.10-702 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
