@@ -1,4 +1,4 @@
-# VERSÃO 0.9.6-698 - Backend: GitHub (Slider re-adicionado na Aba 3)
+# VERSÃO 0.9.7-699 - Backend: GitHub (Aviso adicionado na Aba 3)
 
 import streamlit as st
 import pandas as pd
@@ -394,10 +394,11 @@ try:
             grupo_selecionado = st.selectbox("Busca de chamados por grupo:", options=lista_grupos)
             if grupo_selecionado:
                 resultados_busca = df_aging[df_aging['Atribuir a um grupo'] == grupo_selecionado].copy()
-                resultados_busca['Data de criação'] = resultados_busca['Data de criação'].dt.strftime('%d/%m/%Y')
+                if 'Data de criação' in resultados_busca.columns:
+                    resultados_busca['Data de criação'] = resultados_busca['Data de criação'].dt.strftime('%d/%m/%Y')
                 st.write(f"Encontrados {len(resultados_busca)} chamados para o grupo '{grupo_selecionado}':")
                 colunas_para_exibir_busca = ['ID do ticket', 'Descrição', 'Dias em Aberto', 'Data de criação']
-                st.data_editor(resultados_busca[colunas_para_exibir_busca], use_container_width=True, hide_index=True, disabled=True)
+                st.data_editor(resultados_busca[[col for col in colunas_para_exibir_busca if col in resultados_busca.columns]], use_container_width=True, hide_index=True, disabled=True)
     with tab2:
         st.subheader("Resumo do Backlog Atual")
         if not df_aging.empty:
@@ -449,6 +450,7 @@ try:
             st.warning("Nenhum dado para gerar o report visual.")
     with tab3:
         st.subheader("Evolução do Backlog")
+        st.info("Esta visualização ainda está coletando dados históricos. A análise completa estará disponível após alguns dias de coleta. Utilize as outras abas como referência principal por enquanto.")
         dias_evolucao = st.slider("Ver evolução dos últimos dias:", min_value=7, max_value=30, value=7, key="slider_evolucao")
         df_evolucao = carregar_dados_evolucao(repo, dias_para_analisar=dias_evolucao)
         if not df_evolucao.empty:
@@ -463,10 +465,9 @@ try:
                 st.plotly_chart(fig_evolucao, use_container_width=True)
         else:
             st.info("Ainda não há dados históricos suficientes para exibir a evolução.")
-            st.info("Os dados começarão a ser coletados assim que novos arquivos de backlog forem salvos pelo administrador.")
 except Exception as e:
     st.error(f"Ocorreu um erro ao carregar os dados: {e}")
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.6-698 | Este dashboard está em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.7-699 | Este dashboard está em desenvolvimento.</p>""", unsafe_allow_html=True)
