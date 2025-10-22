@@ -340,18 +340,31 @@ try:
     df_atual_filtrado = df_abertos[~df_abertos['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     df_15dias_filtrado = df_15dias[~df_15dias['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     df_aging = analisar_aging(df_atual_filtrado)
+
+    # Calcula df_encerrados_filtrado aqui para usar no card
+    df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
+
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
     with tab1:
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
-        if not df_encerrados.empty: info_messages.append(f"- **{len(df_encerrados)} chamados fechados no dia** foram deduzidos das contagens principais.")
+        if not df_encerrados_filtrado.empty:
+             info_messages.append(f"- **{len(df_encerrados_filtrado)} chamados fechados no dia** foram deduzidos das contagens principais.")
         st.info("\n".join(info_messages))
         st.subheader("Análise de Antiguidade do Backlog Atual")
         texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
         st.markdown(f"<p style='font-size: 0.9em; color: #666;'><i>Data de referência: {data_atual_str}{texto_hora}</i></p>", unsafe_allow_html=True)
         if not df_aging.empty:
             total_chamados = len(df_aging)
-            _, col_total, _ = st.columns([2, 1.5, 2])
-            with col_total: st.markdown(f"""<div class="metric-box"><span class="value">{total_chamados}</span><span class="label">Total de Chamados</span></div>""", unsafe_allow_html=True)
+            total_fechados = len(df_encerrados_filtrado)
+            
+            # --- LAYOUT DOS CARDS AJUSTADO ---
+            col_spacer1, col_total, col_fechados, col_spacer2 = st.columns([1, 1.5, 1.5, 1])
+            with col_total:
+                st.markdown(f"""<div class="metric-box"><span class="value">{total_chamados}</span><span class="label">Total de Chamados Abertos</span></div>""", unsafe_allow_html=True)
+            with col_fechados:
+                valor_fechados = total_fechados if total_fechados > 0 else "N/A"
+                st.markdown(f"""<div class="metric-box"><span class="value">{valor_fechados}</span><span class="label">Chamados Fechados no Dia</span></div>""", unsafe_allow_html=True)
+
             st.markdown("---")
             aging_counts = df_aging['Faixa de Antiguidade'].value_counts().reset_index()
             aging_counts.columns = ['Faixa de Antiguidade', 'Quantidade']
@@ -376,8 +389,7 @@ try:
         st.dataframe(df_comparativo.set_index('Grupo Atribuído').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
         st.markdown("---")
         st.markdown(f"<h3>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
-        if not df_encerrados.empty:
-            df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
+        if not df_encerrados_filtrado.empty:
             df_encerrados_display = df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']].rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
             st.data_editor(df_encerrados_display, hide_index=True, disabled=True, use_container_width=True)
         else: st.info("Arquivo não carregado.")
