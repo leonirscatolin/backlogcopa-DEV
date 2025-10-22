@@ -309,14 +309,19 @@ try:
         st.session_state.contacted_tickets = set(read_github_json_dict(repo, "contacted_tickets.json"))
     if 'observations' not in st.session_state:
         st.session_state.observations = read_github_json_dict(repo, "ticket_observations.json")
-    needs_scroll = "scroll" in st.query_params
-    if "faixa" in st.query_params:
+    
+    needs_scroll_faixa = "faixa" in st.query_params
+    needs_scroll_encerrados = "scroll_to" in st.query_params and st.query_params.get("scroll_to") == "encerrados"
+
+    if needs_scroll_faixa:
         faixa_from_url = st.query_params.get("faixa")
         ordem_faixas_validas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
         if faixa_from_url in ordem_faixas_validas:
-                st.session_state.faixa_selecionada = faixa_from_url
-    if "scroll" in st.query_params or "faixa" in st.query_params:
+            st.session_state.faixa_selecionada = faixa_from_url
+    
+    if needs_scroll_faixa or needs_scroll_encerrados:
         st.query_params.clear()
+
     df_atual = read_github_file(repo, "dados_atuais.csv")
     df_15dias = read_github_file(repo, "dados_15_dias.csv")
     df_fechados = read_github_file(repo, "dados_fechados.csv")
@@ -345,7 +350,7 @@ try:
     with tab1:
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
         if not df_encerrados_filtrado.empty:
-             info_messages.append("- Chamados fechados já foram deduzidos da contagem principal e dos respectivos grupos.")
+             info_messages.append("- Os chamados marcados como fechados no dia já foram excluídos das contagens principais e dos grupos correspondentes.")
         st.info("\n".join(info_messages))
         st.subheader("Análise de Antiguidade do Backlog Atual")
         texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
@@ -357,7 +362,8 @@ try:
             with col_total: st.markdown(f"""<div class="metric-box"><span class="value">{total_chamados}</span><span class="label">Total de Chamados Abertos</span></div>""", unsafe_allow_html=True)
             with col_fechados:
                 valor_fechados = total_fechados if total_fechados > 0 else "N/A"
-                st.markdown(f"""<div class="metric-box"><span class="value">{valor_fechados}</span><span class="label">Chamados Fechados no Dia</span></div>""", unsafe_allow_html=True)
+                card_fechados_html = f"""<a href="?scroll_to=encerrados" target="_self" class="metric-box" style="text-decoration: none;"><span class="value">{valor_fechados}</span><span class="label">Chamados Fechados no Dia</span></a>"""
+                st.markdown(card_fechados_html, unsafe_allow_html=True)
             st.markdown("---")
             aging_counts = df_aging['Faixa de Antiguidade'].value_counts().reset_index()
             aging_counts.columns = ['Faixa de Antiguidade', 'Quantidade']
@@ -381,20 +387,47 @@ try:
         df_comparativo = df_comparativo[['Grupo Atribuído', '15 Dias Atrás', 'Atual', 'Diferença', 'Status']]
         st.dataframe(df_comparativo.set_index('Grupo Atribuído').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
         st.markdown("---")
-        st.markdown(f"<h3>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
+        st.markdown(f"<h3 id='chamados-encerrados'>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
         if not df_encerrados_filtrado.empty:
             df_encerrados_display = df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']].rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
             st.data_editor(df_encerrados_display, hide_index=True, disabled=True, use_container_width=True)
         else: st.info("Arquivo não carregado.")
         if not df_aging.empty:
             st.markdown("---")
-            st.subheader("Detalhar e Buscar Chamados")
+            st.markdown("<h3 id='detalhar-e-buscar-chamados'>Detalhar e Buscar Chamados</h3>", unsafe_allow_html=True)
             st.info('Marque "Contato" se já falou com o usuário e a solicitação continua pendente. Use "Observações" para anotações.')
             if 'scroll_to_details' not in st.session_state: st.session_state.scroll_to_details = False
-            if needs_scroll or st.session_state.get('scroll_to_details', False):
-                js_code = """<script> setTimeout(() => { const element = window.parent.document.getElementById('detalhar-e-buscar-chamados'); if (element) { element.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 250); </script>"""
+
+            # --- JAVASCRIPT DE SCROLL ATUALIZADO ---
+            if needs_scroll_faixa or needs_scroll_encerrados or st.session_state.get('scroll_to_details', False):
+                js_code = """
+                <script>
+                    setTimeout(() => {
+                        const params = new URLSearchParams(window.location.search);
+                        let targetId = null;
+
+                        if (params.has('scroll_to') && params.get('scroll_to') === 'encerrados') {
+                            targetId = 'chamados-encerrados';
+                        } else if (params.has('scroll') || params.has('faixa')) {
+                            targetId = 'detalhar-e-buscar-chamados';
+                        } else if (sessionStorage.getItem('streamlit_scroll_request') === 'details') {
+                             targetId = 'detalhar-e-buscar-chamados';
+                             sessionStorage.removeItem('streamlit_scroll_request'); // Limpa após usar
+                        }
+
+
+                        if (targetId) {
+                            const element = window.parent.document.getElementById(targetId);
+                            if (element) {
+                                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }
+                        }
+                    }, 250);
+                </script>
+                """
                 components.html(js_code, height=0)
-                st.session_state.scroll_to_details = False
+                st.session_state.scroll_to_details = False # Reseta após tentar scroll
+
             ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
             st.selectbox("Detalhar por faixa de idade:", options=ordem_faixas, key='faixa_selecionada')
             faixa_atual = st.session_state.faixa_selecionada
@@ -487,4 +520,4 @@ except Exception as e:
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.11-703 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.12-704 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
