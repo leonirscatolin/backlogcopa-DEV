@@ -1,5 +1,3 @@
-# VERSÃO 0.9.15-707 - Backend: GitHub (com DEBUG na função de evolução)
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -71,10 +69,10 @@ def read_github_file(_repo, file_path):
         return df
     except GithubException as e:
         if e.status == 404: return pd.DataFrame()
-        # st.error(f"Erro ao ler CSV '{file_path}': {e}") # Comentado para Debug
+        st.error(f"Erro ao ler CSV '{file_path}': {e}")
         return pd.DataFrame()
     except Exception as e:
-        # st.error(f"Erro ao ler CSV '{file_path}': {e}") # Comentado para Debug
+        st.error(f"Erro ao ler CSV '{file_path}': {e}")
         return pd.DataFrame()
 
 @st.cache_data(ttl=300)
@@ -213,55 +211,38 @@ def sync_ticket_data():
 
 @st.cache_data(ttl=3600)
 def carregar_dados_evolucao(_repo, dias_para_analisar=7):
-    st.write(f"--- [DEBUG] Iniciando carregar_dados_evolucao para {dias_para_analisar} dias ---")
     try:
         all_files_content = _repo.get_contents("snapshots")
         all_files = [f.path for f in all_files_content]
-        st.write("[DEBUG] Arquivos encontrados em snapshots/:", all_files)
         df_evolucao_list = []
         end_date = date.today()
         start_date = end_date - timedelta(days=dias_para_analisar - 1)
-        st.write(f"[DEBUG] Período de análise: {start_date.strftime('%Y-%m-%d')} a {end_date.strftime('%Y-%m-%d')}")
-        valid_files_in_period = []
         for file_name in all_files:
             if file_name.startswith("snapshots/backlog_") and file_name.endswith(".csv"):
                 try:
                     date_str = file_name.replace("snapshots/backlog_", "").replace(".csv", "")
                     file_date = datetime.strptime(date_str, "%Y-%m-%d").date()
                     if start_date <= file_date <= end_date:
-                        valid_files_in_period.append(file_name)
-                        st.write(f"-> [DEBUG] Lendo arquivo DENTRO do período: {file_name}")
                         df_snapshot = read_github_file(_repo, file_name)
-                        st.write(f"   [DEBUG] Conteúdo lido (shape): {df_snapshot.shape}")
                         if not df_snapshot.empty and 'Atribuir a um grupo' in df_snapshot.columns:
                             df_snapshot_filtrado = df_snapshot[~df_snapshot['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
                             contagem_diaria = df_snapshot_filtrado.groupby('Atribuir a um grupo').size().reset_index(name='Total Chamados')
                             contagem_diaria['Data'] = pd.to_datetime(file_date)
                             df_evolucao_list.append(contagem_diaria)
-                        else:
-                            st.write(f"   [DEBUG] Arquivo {file_name} vazio ou sem coluna 'Atribuir a um grupo'.")
                 except ValueError:
-                     st.write(f"   [DEBUG] Ignorando {file_name} (data inválida)")
-                     continue
-                except Exception as read_err:
-                     st.write(f"   [DEBUG] Erro ao ler {file_name}: {read_err}")
-        st.write("[DEBUG] Arquivos que passaram no filtro de data:", valid_files_in_period)
-        st.write(f"[DEBUG] Número de DataFrames adicionados à lista final: {len(df_evolucao_list)}")
+                    continue
+                except Exception:
+                    continue # Ignora erros de leitura de arquivos individuais para não parar tudo
         if not df_evolucao_list:
-            st.write("[DEBUG] Lista df_evolucao_list está vazia.")
             return pd.DataFrame()
         df_consolidado = pd.concat(df_evolucao_list, ignore_index=True)
-        st.write(f"[DEBUG] Shape do DataFrame consolidado final: {df_consolidado.shape}")
-        st.write(f"--- [DEBUG] Finalizando carregar_dados_evolucao ---")
         return df_consolidado.sort_values(by=['Data', 'Atribuir a um grupo'])
     except GithubException as e:
-        if e.status == 404:
-            st.write("[DEBUG] Pasta 'snapshots' não encontrada.")
-            return pd.DataFrame()
-        st.warning(f"Não foi possível carregar o histórico de snapshots: {e}")
+        if e.status == 404: return pd.DataFrame()
+        st.warning(f"Não foi possível carregar snapshots: {e}")
         return pd.DataFrame()
     except Exception as e:
-        st.error(f"Ocorreu um erro inesperado ao carregar dados de evolução: {e}")
+        st.error(f"Erro ao carregar evolução: {e}")
         return pd.DataFrame()
 
 st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
@@ -528,7 +509,7 @@ try:
                 st.metric(label="Total Geral Atual", value="N/A")
             st.markdown("---")
             fig_total_evolucao = px.area(
-                df_total_diario,
+                df_total_diario.sort_values('Data'), # Ordenação explícita
                 x='Data',
                 y='Total Chamados',
                 title='Evolução do Total Geral de Chamados Abertos',
@@ -545,7 +526,15 @@ try:
             else:
                 df_filtrado = df_evolucao[df_evolucao['Atribuir a um grupo'].isin(grupos_selecionados)]
                 df_filtrado_display = df_filtrado.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
-                fig_evolucao_grupo = px.line( df_filtrado_display, x='Data', y='Total Chamados', color='Grupo Atribuído', title='Evolução por Grupo', markers=True, labels={ "Data": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" } )
+                fig_evolucao_grupo = px.line(
+                    df_filtrado_display.sort_values('Data'), # Ordenação explícita
+                    x='Data',
+                    y='Total Chamados',
+                    color='Grupo Atribuído',
+                    title='Evolução por Grupo',
+                    markers=True,
+                    labels={ "Data": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" }
+                )
                 fig_evolucao_grupo.update_layout(height=600)
                 st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
         else: st.info("Ainda não há dados históricos suficientes.")
@@ -554,4 +543,4 @@ except Exception as e:
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.15-707 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.15-708 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
