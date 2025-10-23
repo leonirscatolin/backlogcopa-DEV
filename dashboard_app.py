@@ -1,3 +1,5 @@
+# VERSÃO 0.9.15-708 - Backend: GitHub (Build atualizado)
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -499,17 +501,13 @@ try:
         df_evolucao = carregar_dados_evolucao(repo, dias_para_analisar=dias_evolucao)
         if not df_evolucao.empty:
             df_total_diario = df_evolucao.groupby('Data')['Total Chamados'].sum().reset_index()
-
-            # --- NOVO CARD DE MÉTRICA PARA TOTAL ATUAL ---
             if not df_total_diario.empty:
                 total_atual_evolucao = df_total_diario.iloc[-1]['Total Chamados']
                 data_total_atual = df_total_diario.iloc[-1]['Data'].strftime('%d/%m/%Y')
                 st.metric(label=f"Total Geral em {data_total_atual}", value=f"{total_atual_evolucao}")
             else:
                 st.metric(label="Total Geral Atual", value="N/A")
-
-            st.markdown("---") # Separador visual
-
+            st.markdown("---")
             fig_total_evolucao = px.area(
                 df_total_diario,
                 x='Data',
@@ -521,7 +519,6 @@ try:
             fig_total_evolucao.update_layout(height=400)
             st.plotly_chart(fig_total_evolucao, use_container_width=True)
             st.markdown("---")
-
             todos_grupos = sorted(df_evolucao['Atribuir a um grupo'].unique())
             grupos_selecionados = st.multiselect( "Selecione os grupos para visualizar:", options=todos_grupos, default=todos_grupos, key="select_evolucao_grupos" )
             if not grupos_selecionados:
