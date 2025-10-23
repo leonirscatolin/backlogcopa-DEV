@@ -499,7 +499,7 @@ try:
         df_evolucao = carregar_dados_evolucao(repo, dias_para_analisar=dias_evolucao)
         if not df_evolucao.empty:
             df_total_diario = df_evolucao.groupby('Data')['Total Chamados'].sum().reset_index()
-            fig_total_evolucao = px.line(
+            fig_total_evolucao = px.area(
                 df_total_diario,
                 x='Data',
                 y='Total Chamados',
@@ -507,9 +507,9 @@ try:
                 markers=True,
                 labels={"Data": "Data", "Total Chamados": "Total Geral de Chamados"}
             )
-            fig_total_evolucao.update_layout(height=400) # Gráfico um pouco menor
+            fig_total_evolucao.update_layout(height=400)
             st.plotly_chart(fig_total_evolucao, use_container_width=True)
-            st.markdown("---") # Separador visual
+            st.markdown("---")
 
             todos_grupos = sorted(df_evolucao['Atribuir a um grupo'].unique())
             grupos_selecionados = st.multiselect( "Selecione os grupos para visualizar:", options=todos_grupos, default=todos_grupos, key="select_evolucao_grupos" )
@@ -527,4 +527,4 @@ except Exception as e:
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.13-705 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.14-706 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
