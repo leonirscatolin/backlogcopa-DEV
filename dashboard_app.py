@@ -194,20 +194,23 @@ def sync_ticket_data():
         except IndexError:
             st.warning(f"Erro ao processar linha {row_index}.")
             continue
-    now_str = datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')
-    if contact_changed:
-        data_to_save = list(st.session_state.contacted_tickets)
-        json_content = json.dumps(data_to_save, indent=4)
-        commit_msg = f"Atualizando contatos em {now_str}"
-        update_github_file(st.session_state.repo, "contacted_tickets.json", json_content.encode('utf-8'), commit_msg)
-    if observation_changed:
-        json_content = json.dumps(st.session_state.observations, indent=4, ensure_ascii=False)
-        commit_msg = f"Atualizando observações em {now_str}"
-        update_github_file(st.session_state.repo, "ticket_observations.json", json_content.encode('utf-8'), commit_msg)
-    st.session_state.scroll_to_details = True
+
+    if contact_changed or observation_changed:
+        now_str = datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')
+        if contact_changed:
+            data_to_save = list(st.session_state.contacted_tickets)
+            json_content = json.dumps(data_to_save, indent=4)
+            commit_msg = f"Atualizando contatos em {now_str}"
+            update_github_file(st.session_state.repo, "contacted_tickets.json", json_content.encode('utf-8'), commit_msg)
+        if observation_changed:
+            json_content = json.dumps(st.session_state.observations, indent=4, ensure_ascii=False)
+            commit_msg = f"Atualizando observações em {now_str}"
+            update_github_file(st.session_state.repo, "ticket_observations.json", json_content.encode('utf-8'), commit_msg)
+
+        st.session_state.just_edited = True # Flag para indicar que houve edição e salvamento
+
     st.session_state.ticket_editor['edited_rows'] = {}
-    js_set_scroll_flag = "<script>sessionStorage.setItem('streamlit_scroll_request', 'details');</script>"
-    components.html(js_set_scroll_flag, height=0)
+
 
 @st.cache_data(ttl=3600)
 def carregar_dados_evolucao(_repo, dias_para_analisar=7):
@@ -313,6 +316,8 @@ try:
         st.session_state.contacted_tickets = set(read_github_json_dict(repo, "contacted_tickets.json"))
     if 'observations' not in st.session_state:
         st.session_state.observations = read_github_json_dict(repo, "ticket_observations.json")
+    if 'just_edited' not in st.session_state:
+        st.session_state.just_edited = False
 
     url_params = st.query_params.to_dict()
     needs_scroll_faixa = "faixa" in url_params
@@ -404,9 +409,14 @@ try:
             st.markdown("---")
             st.markdown("<h3 id='detalhar-e-buscar-chamados'>Detalhar e Buscar Chamados</h3>", unsafe_allow_html=True)
             st.info('Marque "Contato" se já falou com o usuário e a solicitação continua pendente. Use "Observações" para anotações.')
-            if 'scroll_to_details' not in st.session_state: st.session_state.scroll_to_details = False
-            if scroll_target_id_on_load or st.session_state.get('scroll_to_details', False):
-                scroll_target = scroll_target_id_on_load if scroll_target_id_on_load else 'detalhar-e-buscar-chamados'
+            if 'just_edited' not in st.session_state: st.session_state.just_edited = False
+            scroll_target = None
+            if scroll_target_id_on_load:
+                scroll_target = scroll_target_id_on_load
+            elif st.session_state.get('just_edited', False):
+                scroll_target = 'detalhar-e-buscar-chamados'
+                st.session_state.just_edited = False
+            if scroll_target:
                 js_code = f"""
                 <script>
                     setTimeout(() => {{
@@ -423,7 +433,6 @@ try:
                 </script>
                 """
                 components.html(js_code, height=0)
-                st.session_state.scroll_to_details = False
             ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
             st.selectbox("Detalhar por faixa de idade:", options=ordem_faixas, key='faixa_selecionada')
             faixa_atual = st.session_state.faixa_selecionada
@@ -502,16 +511,6 @@ try:
         if not df_evolucao.empty:
             df_total_diario = df_evolucao.groupby('Data')['Total Chamados'].sum().reset_index()
             df_total_diario = df_total_diario.sort_values('Data')
-
-            # --- MÉTRICA REMOVIDA DAQUI ---
-            # if not df_total_diario.empty:
-            #     total_atual_evolucao = df_total_diario.iloc[-1]['Total Chamados']
-            #     data_total_atual = df_total_diario.iloc[-1]['Data'].strftime('%d/%m/%Y')
-            #     st.metric(label=f"Total Geral em {data_total_atual}", value=f"{total_atual_evolucao}")
-            # else:
-            #     st.metric(label="Total Geral Atual", value="N/A")
-            # st.markdown("---")
-
             fig_total_evolucao = px.area(
                 df_total_diario,
                 x='Data',
@@ -542,7 +541,6 @@ try:
                 fig_evolucao_grupo.update_layout(height=600)
                 st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
         else: st.info("Ainda não há dados históricos suficientes.")
-
 except Exception as e:
     st.error(f"Erro ao carregar dados: {e}")
     st.exception(e)
