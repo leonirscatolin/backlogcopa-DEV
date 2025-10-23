@@ -232,7 +232,7 @@ def carregar_dados_evolucao(_repo, dias_para_analisar=7):
                 except ValueError:
                     continue
                 except Exception:
-                    continue # Ignora erros de leitura de arquivos individuais para não parar tudo
+                    continue
         if not df_evolucao_list:
             return pd.DataFrame()
         df_consolidado = pd.concat(df_evolucao_list, ignore_index=True)
@@ -501,6 +501,7 @@ try:
         df_evolucao = carregar_dados_evolucao(repo, dias_para_analisar=dias_evolucao)
         if not df_evolucao.empty:
             df_total_diario = df_evolucao.groupby('Data')['Total Chamados'].sum().reset_index()
+            df_total_diario = df_total_diario.sort_values('Data')
             if not df_total_diario.empty:
                 total_atual_evolucao = df_total_diario.iloc[-1]['Total Chamados']
                 data_total_atual = df_total_diario.iloc[-1]['Data'].strftime('%d/%m/%Y')
@@ -509,7 +510,7 @@ try:
                 st.metric(label="Total Geral Atual", value="N/A")
             st.markdown("---")
             fig_total_evolucao = px.area(
-                df_total_diario.sort_values('Data'), # Ordenação explícita
+                df_total_diario,
                 x='Data',
                 y='Total Chamados',
                 title='Evolução do Total Geral de Chamados Abertos',
@@ -527,7 +528,7 @@ try:
                 df_filtrado = df_evolucao[df_evolucao['Atribuir a um grupo'].isin(grupos_selecionados)]
                 df_filtrado_display = df_filtrado.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
                 fig_evolucao_grupo = px.line(
-                    df_filtrado_display.sort_values('Data'), # Ordenação explícita
+                    df_filtrado_display.sort_values('Data'),
                     x='Data',
                     y='Total Chamados',
                     color='Grupo Atribuído',
@@ -537,7 +538,9 @@ try:
                 )
                 fig_evolucao_grupo.update_layout(height=600)
                 st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
-        else: st.info("Ainda não há dados históricos suficientes.")
+        else:
+            st.info("Ainda não há dados históricos suficientes.")
+            st.metric(label="Total Geral Atual", value="N/A")
 except Exception as e:
     st.error(f"Erro ao carregar dados: {e}")
     st.exception(e)
