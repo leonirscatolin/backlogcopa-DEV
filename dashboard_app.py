@@ -206,6 +206,8 @@ def sync_ticket_data():
         update_github_file(st.session_state.repo, "ticket_observations.json", json_content.encode('utf-8'), commit_msg)
     st.session_state.scroll_to_details = True
     st.session_state.ticket_editor['edited_rows'] = {}
+    js_set_scroll_flag = "<script>sessionStorage.setItem('streamlit_scroll_request', 'details');</script>"
+    components.html(js_set_scroll_flag, height=0)
 
 @st.cache_data(ttl=3600)
 def carregar_dados_evolucao(_repo, dias_para_analisar=7):
@@ -309,17 +311,21 @@ try:
         st.session_state.contacted_tickets = set(read_github_json_dict(repo, "contacted_tickets.json"))
     if 'observations' not in st.session_state:
         st.session_state.observations = read_github_json_dict(repo, "ticket_observations.json")
-    
-    needs_scroll_faixa = "faixa" in st.query_params
-    needs_scroll_encerrados = "scroll_to" in st.query_params and st.query_params.get("scroll_to") == "encerrados"
 
-    if needs_scroll_faixa:
-        faixa_from_url = st.query_params.get("faixa")
+    url_params = st.query_params.to_dict()
+    needs_scroll_faixa = "faixa" in url_params
+    needs_scroll_encerrados = "scroll_to" in url_params and url_params.get("scroll_to") == "encerrados"
+    scroll_target_id_on_load = None
+
+    if needs_scroll_encerrados:
+        scroll_target_id_on_load = 'chamados-encerrados'
+        st.query_params.clear()
+    elif needs_scroll_faixa:
+        faixa_from_url = url_params.get("faixa")
         ordem_faixas_validas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
         if faixa_from_url in ordem_faixas_validas:
             st.session_state.faixa_selecionada = faixa_from_url
-    
-    if needs_scroll_faixa or needs_scroll_encerrados:
+        scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
         st.query_params.clear()
 
     df_atual = read_github_file(repo, "dados_atuais.csv")
@@ -397,37 +403,25 @@ try:
             st.markdown("<h3 id='detalhar-e-buscar-chamados'>Detalhar e Buscar Chamados</h3>", unsafe_allow_html=True)
             st.info('Marque "Contato" se já falou com o usuário e a solicitação continua pendente. Use "Observações" para anotações.')
             if 'scroll_to_details' not in st.session_state: st.session_state.scroll_to_details = False
-
-            # --- JAVASCRIPT DE SCROLL ATUALIZADO ---
-            if needs_scroll_faixa or needs_scroll_encerrados or st.session_state.get('scroll_to_details', False):
-                js_code = """
+            if scroll_target_id_on_load or st.session_state.get('scroll_to_details', False):
+                scroll_target = scroll_target_id_on_load if scroll_target_id_on_load else 'detalhar-e-buscar-chamados'
+                js_code = f"""
                 <script>
-                    setTimeout(() => {
-                        const params = new URLSearchParams(window.location.search);
-                        let targetId = null;
-
-                        if (params.has('scroll_to') && params.get('scroll_to') === 'encerrados') {
-                            targetId = 'chamados-encerrados';
-                        } else if (params.has('scroll') || params.has('faixa')) {
-                            targetId = 'detalhar-e-buscar-chamados';
-                        } else if (sessionStorage.getItem('streamlit_scroll_request') === 'details') {
-                             targetId = 'detalhar-e-buscar-chamados';
-                             sessionStorage.removeItem('streamlit_scroll_request'); // Limpa após usar
-                        }
-
-
-                        if (targetId) {
-                            const element = window.parent.document.getElementById(targetId);
-                            if (element) {
-                                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                            }
-                        }
-                    }, 250);
+                    setTimeout(() => {{
+                        const element = window.parent.document.getElementById('{scroll_target}');
+                        if (element) {{
+                            element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+                        }}
+                        const url = new URL(window.location);
+                        url.searchParams.delete('faixa');
+                        url.searchParams.delete('scroll');
+                        url.searchParams.delete('scroll_to');
+                        window.history.replaceState({{}}, '', url);
+                    }}, 300);
                 </script>
                 """
                 components.html(js_code, height=0)
-                st.session_state.scroll_to_details = False # Reseta após tentar scroll
-
+                st.session_state.scroll_to_details = False
             ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
             st.selectbox("Detalhar por faixa de idade:", options=ordem_faixas, key='faixa_selecionada')
             faixa_atual = st.session_state.faixa_selecionada
@@ -504,6 +498,19 @@ try:
         dias_evolucao = st.slider("Ver evolução dos últimos dias:", min_value=7, max_value=30, value=7, key="slider_evolucao")
         df_evolucao = carregar_dados_evolucao(repo, dias_para_analisar=dias_evolucao)
         if not df_evolucao.empty:
+            df_total_diario = df_evolucao.groupby('Data')['Total Chamados'].sum().reset_index()
+            fig_total_evolucao = px.line(
+                df_total_diario,
+                x='Data',
+                y='Total Chamados',
+                title='Evolução do Total Geral de Chamados Abertos',
+                markers=True,
+                labels={"Data": "Data", "Total Chamados": "Total Geral de Chamados"}
+            )
+            fig_total_evolucao.update_layout(height=400) # Gráfico um pouco menor
+            st.plotly_chart(fig_total_evolucao, use_container_width=True)
+            st.markdown("---") # Separador visual
+
             todos_grupos = sorted(df_evolucao['Atribuir a um grupo'].unique())
             grupos_selecionados = st.multiselect( "Selecione os grupos para visualizar:", options=todos_grupos, default=todos_grupos, key="select_evolucao_grupos" )
             if not grupos_selecionados:
@@ -511,13 +518,13 @@ try:
             else:
                 df_filtrado = df_evolucao[df_evolucao['Atribuir a um grupo'].isin(grupos_selecionados)]
                 df_filtrado_display = df_filtrado.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
-                fig_evolucao = px.line( df_filtrado_display, x='Data', y='Total Chamados', color='Grupo Atribuído', title='Total de Chamados Abertos por Grupo', markers=True, labels={ "Data": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" } )
-                fig_evolucao.update_layout(height=600)
-                st.plotly_chart(fig_evolucao, use_container_width=True)
+                fig_evolucao_grupo = px.line( df_filtrado_display, x='Data', y='Total Chamados', color='Grupo Atribuído', title='Evolução por Grupo', markers=True, labels={ "Data": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" } )
+                fig_evolucao_grupo.update_layout(height=600)
+                st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
         else: st.info("Ainda não há dados históricos suficientes.")
 except Exception as e:
     st.error(f"Erro ao carregar dados: {e}")
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.12-704 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.13-705 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
