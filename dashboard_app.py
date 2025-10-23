@@ -1,3 +1,5 @@
+# VERSÃO 0.9.18-711 - Backend: GitHub (Scroll simplificado, visual restaurado)
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -185,29 +187,36 @@ def sync_ticket_data():
         try:
             ticket_id = str(st.session_state.last_filtered_df.iloc[row_index]['ID do ticket'])
             if 'Contato' in changes:
-                if changes['Contato']: st.session_state.contacted_tickets.add(ticket_id)
-                else: st.session_state.contacted_tickets.discard(ticket_id)
-                contact_changed = True
+                current_contact_status = ticket_id in st.session_state.contacted_tickets
+                new_contact_status = changes['Contato']
+                if current_contact_status != new_contact_status:
+                    if new_contact_status: st.session_state.contacted_tickets.add(ticket_id)
+                    else: st.session_state.contacted_tickets.discard(ticket_id)
+                    contact_changed = True
             if 'Observações' in changes:
-                st.session_state.observations[ticket_id] = changes['Observações']
-                observation_changed = True
+                current_observation = st.session_state.observations.get(ticket_id, '')
+                new_observation = changes['Observações']
+                if current_observation != new_observation:
+                    st.session_state.observations[ticket_id] = new_observation
+                    observation_changed = True
         except IndexError:
             st.warning(f"Erro ao processar linha {row_index}.")
             continue
-    now_str = datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')
-    if contact_changed:
-        data_to_save = list(st.session_state.contacted_tickets)
-        json_content = json.dumps(data_to_save, indent=4)
-        commit_msg = f"Atualizando contatos em {now_str}"
-        update_github_file(st.session_state.repo, "contacted_tickets.json", json_content.encode('utf-8'), commit_msg)
-    if observation_changed:
-        json_content = json.dumps(st.session_state.observations, indent=4, ensure_ascii=False)
-        commit_msg = f"Atualizando observações em {now_str}"
-        update_github_file(st.session_state.repo, "ticket_observations.json", json_content.encode('utf-8'), commit_msg)
-    st.session_state.scroll_to_details = True
+
+    if contact_changed or observation_changed:
+        now_str = datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')
+        if contact_changed:
+            data_to_save = list(st.session_state.contacted_tickets)
+            json_content = json.dumps(data_to_save, indent=4)
+            commit_msg = f"Atualizando contatos em {now_str}"
+            update_github_file(st.session_state.repo, "contacted_tickets.json", json_content.encode('utf-8'), commit_msg)
+        if observation_changed:
+            json_content = json.dumps(st.session_state.observations, indent=4, ensure_ascii=False)
+            commit_msg = f"Atualizando observações em {now_str}"
+            update_github_file(st.session_state.repo, "ticket_observations.json", json_content.encode('utf-8'), commit_msg)
+
     st.session_state.ticket_editor['edited_rows'] = {}
-    js_set_scroll_flag = "<script>sessionStorage.setItem('streamlit_scroll_request', 'details');</script>"
-    components.html(js_set_scroll_flag, height=0)
+
 
 @st.cache_data(ttl=3600)
 def carregar_dados_evolucao(_repo, dias_para_analisar=7):
@@ -306,7 +315,8 @@ if is_admin:
                     st.sidebar.success("Fechados salvos! Recarregando...")
                     st.rerun()
         else: st.sidebar.warning("Carregue o arquivo de fechados.")
-elif password: st.sidebar.error("Senha incorreta.")
+elif password:
+    st.sidebar.error("Senha incorreta.")
 
 try:
     if 'contacted_tickets' not in st.session_state:
@@ -315,18 +325,16 @@ try:
         st.session_state.observations = read_github_json_dict(repo, "ticket_observations.json")
 
     url_params = st.query_params.to_dict()
-    needs_scroll_faixa = "faixa" in url_params
-    needs_scroll_encerrados = "scroll_to" in url_params and url_params.get("scroll_to") == "encerrados"
     scroll_target_id_on_load = None
-
-    if needs_scroll_encerrados:
+    if "scroll_to" in url_params and url_params.get("scroll_to") == "encerrados":
         scroll_target_id_on_load = 'chamados-encerrados'
         st.query_params.clear()
-    elif needs_scroll_faixa:
+    elif "faixa" in url_params:
         faixa_from_url = url_params.get("faixa")
         ordem_faixas_validas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
         if faixa_from_url in ordem_faixas_validas:
-            st.session_state.faixa_selecionada = faixa_from_url
+             if 'faixa_selecionada' not in st.session_state or st.session_state.faixa_selecionada != faixa_from_url:
+                 st.session_state.faixa_selecionada = faixa_from_url
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
         st.query_params.clear()
 
@@ -354,7 +362,22 @@ try:
     df_15dias_filtrado = df_15dias[~df_15dias['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     df_aging = analisar_aging(df_atual_filtrado)
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
+
+    if scroll_target_id_on_load: # Injeta JS APENAS se veio da URL
+        js_code = f"""
+        <script>
+            setTimeout(() => {{
+                const element = window.parent.document.getElementById('{scroll_target_id_on_load}');
+                if (element) {{
+                    element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+                }}
+            }}, 350);
+        </script>
+        """
+        components.html(js_code, height=0)
+
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
+
     with tab1:
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
         if not df_encerrados_filtrado.empty:
@@ -404,27 +427,9 @@ try:
             st.markdown("---")
             st.markdown("<h3 id='detalhar-e-buscar-chamados'>Detalhar e Buscar Chamados</h3>", unsafe_allow_html=True)
             st.info('Marque "Contato" se já falou com o usuário e a solicitação continua pendente. Use "Observações" para anotações.')
-            if 'scroll_to_details' not in st.session_state: st.session_state.scroll_to_details = False
-            if scroll_target_id_on_load or st.session_state.get('scroll_to_details', False):
-                scroll_target = scroll_target_id_on_load if scroll_target_id_on_load else 'detalhar-e-buscar-chamados'
-                js_code = f"""
-                <script>
-                    setTimeout(() => {{
-                        const element = window.parent.document.getElementById('{scroll_target}');
-                        if (element) {{
-                            element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-                        }}
-                        const url = new URL(window.location);
-                        url.searchParams.delete('faixa');
-                        url.searchParams.delete('scroll');
-                        url.searchParams.delete('scroll_to');
-                        window.history.replaceState({{}}, '', url);
-                    }}, 300);
-                </script>
-                """
-                components.html(js_code, height=0)
-                st.session_state.scroll_to_details = False
             ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
+            if 'faixa_selecionada' not in st.session_state:
+                 st.session_state.faixa_selecionada = "0-2 dias"
             st.selectbox("Detalhar por faixa de idade:", options=ordem_faixas, key='faixa_selecionada')
             faixa_atual = st.session_state.faixa_selecionada
             filtered_df = df_aging[df_aging['Faixa de Antiguidade'] == faixa_atual].copy()
@@ -502,16 +507,6 @@ try:
         if not df_evolucao.empty:
             df_total_diario = df_evolucao.groupby('Data')['Total Chamados'].sum().reset_index()
             df_total_diario = df_total_diario.sort_values('Data')
-
-            # --- MÉTRICA REMOVIDA DAQUI ---
-            # if not df_total_diario.empty:
-            #     total_atual_evolucao = df_total_diario.iloc[-1]['Total Chamados']
-            #     data_total_atual = df_total_diario.iloc[-1]['Data'].strftime('%d/%m/%Y')
-            #     st.metric(label=f"Total Geral em {data_total_atual}", value=f"{total_atual_evolucao}")
-            # else:
-            #     st.metric(label="Total Geral Atual", value="N/A")
-            # st.markdown("---")
-
             fig_total_evolucao = px.area(
                 df_total_diario,
                 x='Data',
@@ -542,10 +537,9 @@ try:
                 fig_evolucao_grupo.update_layout(height=600)
                 st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
         else: st.info("Ainda não há dados históricos suficientes.")
-
 except Exception as e:
     st.error(f"Erro ao carregar dados: {e}")
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.16-709 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.18-711 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
