@@ -502,13 +502,16 @@ try:
         if not df_evolucao.empty:
             df_total_diario = df_evolucao.groupby('Data')['Total Chamados'].sum().reset_index()
             df_total_diario = df_total_diario.sort_values('Data')
-            if not df_total_diario.empty:
-                total_atual_evolucao = df_total_diario.iloc[-1]['Total Chamados']
-                data_total_atual = df_total_diario.iloc[-1]['Data'].strftime('%d/%m/%Y')
-                st.metric(label=f"Total Geral em {data_total_atual}", value=f"{total_atual_evolucao}")
-            else:
-                st.metric(label="Total Geral Atual", value="N/A")
-            st.markdown("---")
+
+            # --- MÉTRICA REMOVIDA DAQUI ---
+            # if not df_total_diario.empty:
+            #     total_atual_evolucao = df_total_diario.iloc[-1]['Total Chamados']
+            #     data_total_atual = df_total_diario.iloc[-1]['Data'].strftime('%d/%m/%Y')
+            #     st.metric(label=f"Total Geral em {data_total_atual}", value=f"{total_atual_evolucao}")
+            # else:
+            #     st.metric(label="Total Geral Atual", value="N/A")
+            # st.markdown("---")
+
             fig_total_evolucao = px.area(
                 df_total_diario,
                 x='Data',
@@ -538,12 +541,11 @@ try:
                 )
                 fig_evolucao_grupo.update_layout(height=600)
                 st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
-        else:
-            st.info("Ainda não há dados históricos suficientes.")
-            st.metric(label="Total Geral Atual", value="N/A")
+        else: st.info("Ainda não há dados históricos suficientes.")
+
 except Exception as e:
     st.error(f"Erro ao carregar dados: {e}")
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.15-708 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.16-709 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
