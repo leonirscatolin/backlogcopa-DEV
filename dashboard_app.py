@@ -20,7 +20,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- Funções GitHub (sem alterações) ---
 @st.cache_resource
 def get_github_repo():
     try:
@@ -207,8 +206,7 @@ def sync_ticket_data():
             json_content = json.dumps(st.session_state.observations, indent=4, ensure_ascii=False)
             commit_msg = f"Atualizando observações em {now_str}"
             update_github_file(st.session_state.repo, "ticket_observations.json", json_content.encode('utf-8'), commit_msg)
-
-        st.session_state.just_edited = True # Define a flag APÓS salvar com sucesso
+        st.session_state.just_edited = True
 
     st.session_state.ticket_editor['edited_rows'] = {}
 
@@ -249,12 +247,12 @@ def carregar_dados_evolucao(_repo, dias_para_analisar=7):
         st.error(f"Erro ao carregar evolução: {e}")
         return pd.DataFrame()
 
-st.html("""<style>...</style>""") # CSS omitido
+st.html("""<style>...</style>""")
 
 logo_copa_b64 = get_image_as_base64("logo_sidebar.png")
 logo_belago_b64 = get_image_as_base64("logo_belago.png")
 if logo_copa_b64 and logo_belago_b64:
-    st.markdown(f"""...""", unsafe_allow_html=True) # Logos omitidos
+    st.markdown(f"""...""", unsafe_allow_html=True)
 else: st.error("Arquivos de logo não encontrados.")
 
 repo = get_github_repo()
@@ -265,12 +263,55 @@ password = st.sidebar.text_input("Senha para atualizar dados:", type="password")
 is_admin = password == st.secrets.get("ADMIN_PASSWORD", "")
 
 if is_admin:
-    # Código da área do Admin (sem alterações)
-    # ...
-elif password: st.sidebar.error("Senha incorreta.")
+    st.sidebar.success("Acesso liberado.")
+    st.sidebar.subheader("Atualização Completa")
+    uploaded_file_atual = st.sidebar.file_uploader("1. Backlog ATUAL", type=["csv", "xlsx"], key="uploader_atual")
+    uploaded_file_15dias = st.sidebar.file_uploader("2. Backlog de 15 DIAS ATRÁS", type=["csv", "xlsx"], key="uploader_15dias")
+    if st.sidebar.button("Salvar Novos Dados no Site"):
+        if uploaded_file_atual and uploaded_file_15dias:
+            with st.spinner("Processando e salvando..."):
+                now_sao_paulo = datetime.now(ZoneInfo('America/Sao_Paulo'))
+                commit_msg = f"Dados atualizados em {now_sao_paulo.strftime('%d/%m/%Y %H:%M')}"
+                content_atual = process_uploaded_file(uploaded_file_atual)
+                content_15dias = process_uploaded_file(uploaded_file_15dias)
+                if content_atual is not None and content_15dias is not None:
+                    update_github_file(repo, "dados_atuais.csv", content_atual, commit_msg)
+                    update_github_file(repo, "dados_15_dias.csv", content_15dias, commit_msg)
+                    today_str = now_sao_paulo.strftime('%Y-%m-%d')
+                    snapshot_path = f"snapshots/backlog_{today_str}.csv"
+                    update_github_file(repo, snapshot_path, content_atual, f"Snapshot de {today_str}")
+                    data_do_upload = now_sao_paulo.date()
+                    data_arquivo_15dias = data_do_upload - timedelta(days=15)
+                    hora_atualizacao = now_sao_paulo.strftime('%H:%M')
+                    datas_referencia_content = (f"data_atual:{data_do_upload.strftime('%d/%m/%Y')}\n"
+                                                f"data_15dias:{data_arquivo_15dias.strftime('%d/%m/%Y')}\n"
+                                                f"hora_atualizacao:{hora_atualizacao}")
+                    update_github_file(repo, "datas_referencia.txt", datas_referencia_content.encode('utf-8'), commit_msg)
+                    st.cache_data.clear()
+                    st.cache_resource.clear()
+                    st.sidebar.success("Arquivos salvos! Recarregando...")
+                    st.rerun()
+        else: st.sidebar.warning("Carregue os arquivos ATUAL e de 15 DIAS.")
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Atualização Rápida")
+    uploaded_file_fechados = st.sidebar.file_uploader("Apenas Chamados FECHADOS", type=["csv", "xlsx"], key="uploader_fechados")
+    if st.sidebar.button("Salvar Apenas Chamados Fechados"):
+        if uploaded_file_fechados:
+            with st.spinner("Salvando fechados..."):
+                now_sao_paulo = datetime.now(ZoneInfo('America/Sao_Paulo'))
+                commit_msg = f"Atualizando fechados em {now_sao_paulo.strftime('%d/%m/%Y %H:%M')}"
+                content_fechados = process_uploaded_file(uploaded_file_fechados)
+                if content_fechados is not None:
+                    update_github_file(repo, "dados_fechados.csv", content_fechados, commit_msg)
+                    st.cache_data.clear()
+                    st.cache_resource.clear()
+                    st.sidebar.success("Fechados salvos! Recarregando...")
+                    st.rerun()
+        else: st.sidebar.warning("Carregue o arquivo de fechados.")
+# --- CORREÇÃO DA INDENTAÇÃO AQUI ---
+elif password:
+    st.sidebar.error("Senha incorreta.")
 
-
-# --- Lógica Principal ---
 try:
     if 'contacted_tickets' not in st.session_state:
         st.session_state.contacted_tickets = set(read_github_json_dict(repo, "contacted_tickets.json"))
@@ -279,7 +320,6 @@ try:
     if 'just_edited' not in st.session_state:
         st.session_state.just_edited = False
 
-    # --- LEITURA E LIMPEZA INICIAL DOS PARÂMETROS DA URL ---
     url_params = st.query_params.to_dict()
     scroll_target_id_on_load = None
     if "scroll_to" in url_params and url_params.get("scroll_to") == "encerrados":
@@ -289,11 +329,10 @@ try:
         faixa_from_url = url_params.get("faixa")
         ordem_faixas_validas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
         if faixa_from_url in ordem_faixas_validas:
-            # Atualiza a faixa selecionada apenas se veio da URL
-            st.session_state.faixa_selecionada = faixa_from_url
+            if 'faixa_selecionada' not in st.session_state or st.session_state.faixa_selecionada != faixa_from_url:
+                 st.session_state.faixa_selecionada = faixa_from_url
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
         st.query_params.clear()
-    # --------------------------------------------------------
 
     df_atual = read_github_file(repo, "dados_atuais.csv")
     df_15dias = read_github_file(repo, "dados_15_dias.csv")
@@ -320,7 +359,6 @@ try:
     df_aging = analisar_aging(df_atual_filtrado)
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
 
-    # --- LÓGICA DE SCROLL REFINADA (ANTES DAS TABS) ---
     scroll_target = None
     if scroll_target_id_on_load:
         scroll_target = scroll_target_id_on_load
@@ -344,12 +382,9 @@ try:
         """
         components.html(js_code, height=0)
 
-    # Reseta a flag *depois* de decidir se o JS será injetado ou não nesta execução
     st.session_state.just_edited = False
-    # -----------------------------------------------------
 
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
-
     with tab1:
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
         if not df_encerrados_filtrado.empty:
@@ -399,11 +434,9 @@ try:
             st.markdown("---")
             st.markdown("<h3 id='detalhar-e-buscar-chamados'>Detalhar e Buscar Chamados</h3>", unsafe_allow_html=True)
             st.info('Marque "Contato" se já falou com o usuário e a solicitação continua pendente. Use "Observações" para anotações.')
-
             ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
-            # Garante que a faixa selecionada existe no estado da sessão
             if 'faixa_selecionada' not in st.session_state:
-                 st.session_state.faixa_selecionada = "0-2 dias" # Valor padrão inicial
+                 st.session_state.faixa_selecionada = "0-2 dias"
             st.selectbox("Detalhar por faixa de idade:", options=ordem_faixas, key='faixa_selecionada')
             faixa_atual = st.session_state.faixa_selecionada
             filtered_df = df_aging[df_aging['Faixa de Antiguidade'] == faixa_atual].copy()
