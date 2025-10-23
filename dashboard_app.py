@@ -20,7 +20,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- Funções GitHub (sem alterações) ---
 @st.cache_resource
 def get_github_repo():
     try:
@@ -219,14 +218,47 @@ def sync_ticket_data():
 
 @st.cache_data(ttl=3600)
 def carregar_dados_evolucao(_repo, dias_para_analisar=7):
-    # ... (código da função igual ao anterior)
+    try:
+        all_files_content = _repo.get_contents("snapshots")
+        all_files = [f.path for f in all_files_content]
+        df_evolucao_list = []
+        end_date = date.today()
+        start_date = end_date - timedelta(days=dias_para_analisar - 1)
+        for file_name in all_files:
+            if file_name.startswith("snapshots/backlog_") and file_name.endswith(".csv"):
+                try:
+                    date_str = file_name.replace("snapshots/backlog_", "").replace(".csv", "")
+                    file_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                    if start_date <= file_date <= end_date:
+                        df_snapshot = read_github_file(_repo, file_name)
+                        if not df_snapshot.empty and 'Atribuir a um grupo' in df_snapshot.columns:
+                            df_snapshot_filtrado = df_snapshot[~df_snapshot['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
+                            contagem_diaria = df_snapshot_filtrado.groupby('Atribuir a um grupo').size().reset_index(name='Total Chamados')
+                            contagem_diaria['Data'] = pd.to_datetime(file_date)
+                            df_evolucao_list.append(contagem_diaria)
+                except ValueError:
+                    continue
+                except Exception:
+                    continue
+        if not df_evolucao_list:
+            return pd.DataFrame()
+        df_consolidado = pd.concat(df_evolucao_list, ignore_index=True)
+        return df_consolidado.sort_values(by=['Data', 'Atribuir a um grupo'])
+    except GithubException as e:
+        if e.status == 404: return pd.DataFrame()
+        st.warning(f"Não foi possível carregar snapshots: {e}")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Erro ao carregar evolução: {e}")
+        return pd.DataFrame()
 
-st.html("""<style>...</style>""") # CSS omitido
+# --- INDENTAÇÃO CORRIGIDA AQUI ---
+st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
 
 logo_copa_b64 = get_image_as_base64("logo_sidebar.png")
 logo_belago_b64 = get_image_as_base64("logo_belago.png")
 if logo_copa_b64 and logo_belago_b64:
-    st.markdown(f"""...""", unsafe_allow_html=True) # Logos omitidos
+    st.markdown(f"""<div style="display: flex; justify-content: space-between; align-items: center;"><img src="data:image/png;base64,{logo_copa_b64}" width="150"><h1 style='text-align: center; margin: 0;'>Backlog Copa Energia + Belago</h1><img src="data:image/png;base64,{logo_belago_b64}" width="150"></div>""", unsafe_allow_html=True)
 else: st.error("Arquivos de logo não encontrados.")
 
 repo = get_github_repo()
@@ -237,8 +269,51 @@ password = st.sidebar.text_input("Senha para atualizar dados:", type="password")
 is_admin = password == st.secrets.get("ADMIN_PASSWORD", "")
 
 if is_admin:
-    # Código da área do Admin (sem alterações)
-    # ...
+    st.sidebar.success("Acesso liberado.")
+    st.sidebar.subheader("Atualização Completa")
+    uploaded_file_atual = st.sidebar.file_uploader("1. Backlog ATUAL", type=["csv", "xlsx"], key="uploader_atual")
+    uploaded_file_15dias = st.sidebar.file_uploader("2. Backlog de 15 DIAS ATRÁS", type=["csv", "xlsx"], key="uploader_15dias")
+    if st.sidebar.button("Salvar Novos Dados no Site"):
+        if uploaded_file_atual and uploaded_file_15dias:
+            with st.spinner("Processando e salvando..."):
+                now_sao_paulo = datetime.now(ZoneInfo('America/Sao_Paulo'))
+                commit_msg = f"Dados atualizados em {now_sao_paulo.strftime('%d/%m/%Y %H:%M')}"
+                content_atual = process_uploaded_file(uploaded_file_atual)
+                content_15dias = process_uploaded_file(uploaded_file_15dias)
+                if content_atual is not None and content_15dias is not None:
+                    update_github_file(repo, "dados_atuais.csv", content_atual, commit_msg)
+                    update_github_file(repo, "dados_15_dias.csv", content_15dias, commit_msg)
+                    today_str = now_sao_paulo.strftime('%Y-%m-%d')
+                    snapshot_path = f"snapshots/backlog_{today_str}.csv"
+                    update_github_file(repo, snapshot_path, content_atual, f"Snapshot de {today_str}")
+                    data_do_upload = now_sao_paulo.date()
+                    data_arquivo_15dias = data_do_upload - timedelta(days=15)
+                    hora_atualizacao = now_sao_paulo.strftime('%H:%M')
+                    datas_referencia_content = (f"data_atual:{data_do_upload.strftime('%d/%m/%Y')}\n"
+                                                f"data_15dias:{data_arquivo_15dias.strftime('%d/%m/%Y')}\n"
+                                                f"hora_atualizacao:{hora_atualizacao}")
+                    update_github_file(repo, "datas_referencia.txt", datas_referencia_content.encode('utf-8'), commit_msg)
+                    st.cache_data.clear()
+                    st.cache_resource.clear()
+                    st.sidebar.success("Arquivos salvos! Recarregando...")
+                    st.rerun()
+        else: st.sidebar.warning("Carregue os arquivos ATUAL e de 15 DIAS.")
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Atualização Rápida")
+    uploaded_file_fechados = st.sidebar.file_uploader("Apenas Chamados FECHADOS", type=["csv", "xlsx"], key="uploader_fechados")
+    if st.sidebar.button("Salvar Apenas Chamados Fechados"):
+        if uploaded_file_fechados:
+            with st.spinner("Salvando fechados..."):
+                now_sao_paulo = datetime.now(ZoneInfo('America/Sao_Paulo'))
+                commit_msg = f"Atualizando fechados em {now_sao_paulo.strftime('%d/%m/%Y %H:%M')}"
+                content_fechados = process_uploaded_file(uploaded_file_fechados)
+                if content_fechados is not None:
+                    update_github_file(repo, "dados_fechados.csv", content_fechados, commit_msg)
+                    st.cache_data.clear()
+                    st.cache_resource.clear()
+                    st.sidebar.success("Fechados salvos! Recarregando...")
+                    st.rerun()
+        else: st.sidebar.warning("Carregue o arquivo de fechados.")
 elif password:
     st.sidebar.error("Senha incorreta.")
 
@@ -248,50 +323,19 @@ try:
     if 'observations' not in st.session_state:
         st.session_state.observations = read_github_json_dict(repo, "ticket_observations.json")
 
-    # --- LEITURA INICIAL DOS PARÂMETROS DA URL ---
     url_params = st.query_params.to_dict()
     scroll_target_id_on_load = None
-    faixa_from_url = None
-
     if "scroll_to" in url_params and url_params.get("scroll_to") == "encerrados":
         scroll_target_id_on_load = 'chamados-encerrados'
+        st.query_params.clear()
     elif "faixa" in url_params:
         faixa_from_url = url_params.get("faixa")
         ordem_faixas_validas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
         if faixa_from_url in ordem_faixas_validas:
-             # Atualiza a faixa selecionada apenas se veio da URL e é diferente
              if 'faixa_selecionada' not in st.session_state or st.session_state.faixa_selecionada != faixa_from_url:
                  st.session_state.faixa_selecionada = faixa_from_url
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
-
-    # --- INJEÇÃO DO JS SE NECESSÁRIO ---
-    if scroll_target_id_on_load:
-        js_code = f"""
-        <script>
-            setTimeout(() => {{
-                console.log('Attempting to scroll to: {scroll_target_id_on_load}');
-                const element = window.parent.document.getElementById('{scroll_target_id_on_load}');
-                if (element) {{
-                    element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-                    console.log('Scroll successful.');
-                }} else {{
-                     console.log('Scroll target element not found.');
-                }}
-                // Limpa params da URL após tentar rolar
-                try {{
-                    const url = new URL(window.location);
-                    url.searchParams.delete('faixa');
-                    url.searchParams.delete('scroll');
-                    url.searchParams.delete('scroll_to');
-                    window.history.replaceState({{}}, '', url);
-                }} catch (e) {{ console.error("Could not clear URL parameters:", e); }}
-            }}, 350);
-        </script>
-        """
-        components.html(js_code, height=0)
-        # Limpa os query params do Streamlit *depois* de usar para injetar o JS
         st.query_params.clear()
-    # ----------------------------------------------------
 
     df_atual = read_github_file(repo, "dados_atuais.csv")
     df_15dias = read_github_file(repo, "dados_15_dias.csv")
@@ -317,6 +361,19 @@ try:
     df_15dias_filtrado = df_15dias[~df_15dias['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     df_aging = analisar_aging(df_atual_filtrado)
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
+
+    if scroll_target_id_on_load:
+        js_code = f"""
+        <script>
+            setTimeout(() => {{
+                const element = window.parent.document.getElementById('{scroll_target_id_on_load}');
+                if (element) {{
+                    element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+                }}
+            }}, 350);
+        </script>
+        """
+        components.html(js_code, height=0)
 
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
 
@@ -394,9 +451,91 @@ try:
                 colunas_para_exibir_busca = ['ID do ticket', 'Descrição', 'Dias em Aberto', 'Data de criação']
                 st.data_editor(resultados_busca[[col for col in colunas_para_exibir_busca if col in resultados_busca.columns]], use_container_width=True, hide_index=True, disabled=True)
     with tab2:
-        # ... (Código da Tab 2 sem alterações)
+        st.subheader("Resumo do Backlog Atual")
+        if not df_aging.empty:
+            total_chamados = len(df_aging)
+            _, col_total_tab2, _ = st.columns([2, 1.5, 2])
+            with col_total_tab2: st.markdown( f"""<div class="metric-box"><span class="value">{total_chamados}</span><span class="label">Total de Chamados</span></div>""", unsafe_allow_html=True )
+            st.markdown("---")
+            aging_counts_tab2 = df_aging['Faixa de Antiguidade'].value_counts().reset_index()
+            aging_counts_tab2.columns = ['Faixa de Antiguidade', 'Quantidade']
+            ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
+            todas_as_faixas_tab2 = pd.DataFrame({'Faixa de Antiguidade': ordem_faixas})
+            aging_counts_tab2 = pd.merge(todas_as_faixas_tab2, aging_counts_tab2, on='Faixa de Antiguidade', how='left').fillna(0).astype({'Quantidade': int})
+            aging_counts_tab2['Faixa de Antiguidade'] = pd.Categorical(aging_counts_tab2['Faixa de Antiguidade'], categories=ordem_faixas, ordered=True)
+            aging_counts_tab2 = aging_counts_tab2.sort_values('Faixa de Antiguidade')
+            cols_tab2 = st.columns(len(ordem_faixas))
+            for i, row in aging_counts_tab2.iterrows():
+                with cols_tab2[i]: st.markdown( f"""<div class="metric-box"><span class="value">{row['Quantidade']}</span><span class="label">{row['Faixa de Antiguidade']}</span></div>""", unsafe_allow_html=True )
+            st.markdown("---")
+            st.subheader("Distribuição do Backlog por Grupo")
+            orientation_choice = st.radio( "Orientação do Gráfico:", ["Vertical", "Horizontal"], index=0, horizontal=True )
+            chart_data = df_aging.groupby(['Atribuir a um grupo', 'Faixa de Antiguidade']).size().reset_index(name='Quantidade')
+            group_totals = chart_data.groupby('Atribuir a um grupo')['Quantidade'].sum().sort_values(ascending=False)
+            new_labels_map = {group: f"{group} ({total})" for group, total in group_totals.items()}
+            chart_data['Grupo Atribuído'] = chart_data['Atribuir a um grupo'].map(new_labels_map)
+            sorted_new_labels = [new_labels_map[group] for group in group_totals.index]
+            def lighten_color(hex_color, amount=0.2):
+                try:
+                    hex_color = hex_color.lstrip('#')
+                    h, l, s = colorsys.rgb_to_hls(*[int(hex_color[i:i+2], 16)/255.0 for i in (0, 2, 4)])
+                    new_l = l + (1 - l) * amount
+                    r, g, b = colorsys.hls_to_rgb(h, new_l, s)
+                    return f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+                except Exception: return hex_color
+            base_color = "#375623"
+            palette = [ lighten_color(base_color, 0.85), lighten_color(base_color, 0.70), lighten_color(base_color, 0.55), lighten_color(base_color, 0.40), lighten_color(base_color, 0.20), base_color ]
+            color_map = {faixa: color for faixa, color in zip(ordem_faixas, palette)}
+            if orientation_choice == 'Horizontal':
+                num_groups = len(group_totals)
+                dynamic_height = max(500, num_groups * 30)
+                fig_stacked_bar = px.bar( chart_data, x='Quantidade', y='Grupo Atribuído', orientation='h', color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo", labels={'Quantidade': 'Qtd. de Chamados', 'Grupo Atribuído': ''}, category_orders={'Grupo Atribuído': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas}, color_discrete_map=color_map, text_auto=True )
+                fig_stacked_bar.update_traces(textangle=0, textfont_size=12)
+                fig_stacked_bar.update_layout(height=dynamic_height, legend_title_text='Antiguidade')
+            else:
+                fig_stacked_bar = px.bar( chart_data, x='Grupo Atribuído', y='Quantidade', color='Faixa de Antiguidade', title="Composição da Idade do Backlog por Grupo", labels={'Quantidade': 'Qtd. de Chamados', 'Grupo Atribuído': 'Grupo'}, category_orders={'Grupo Atribuído': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas}, color_discrete_map=color_map, text_auto=True )
+                fig_stacked_bar.update_traces(textangle=0, textfont_size=12)
+                fig_stacked_bar.update_layout(height=600, xaxis_title=None, xaxis_tickangle=-45, legend_title_text='Antiguidade')
+            st.plotly_chart(fig_stacked_bar, use_container_width=True)
+        else: st.warning("Sem dados para gerar report visual.")
     with tab3:
-        # ... (Código da Tab 3 sem alterações)
+        st.subheader("Evolução do Backlog")
+        st.info("Esta visualização ainda está coletando dados históricos. A análise completa estará disponível após alguns dias de coleta. Utilize as outras abas como referência principal por enquanto.")
+        dias_evolucao = st.slider("Ver evolução dos últimos dias:", min_value=7, max_value=30, value=7, key="slider_evolucao")
+        df_evolucao = carregar_dados_evolucao(repo, dias_para_analisar=dias_evolucao)
+        if not df_evolucao.empty:
+            df_total_diario = df_evolucao.groupby('Data')['Total Chamados'].sum().reset_index()
+            df_total_diario = df_total_diario.sort_values('Data')
+            fig_total_evolucao = px.area(
+                df_total_diario,
+                x='Data',
+                y='Total Chamados',
+                title='Evolução do Total Geral de Chamados Abertos',
+                markers=True,
+                labels={"Data": "Data", "Total Chamados": "Total Geral de Chamados"}
+            )
+            fig_total_evolucao.update_layout(height=400)
+            st.plotly_chart(fig_total_evolucao, use_container_width=True)
+            st.markdown("---")
+            todos_grupos = sorted(df_evolucao['Atribuir a um grupo'].unique())
+            grupos_selecionados = st.multiselect( "Selecione os grupos para visualizar:", options=todos_grupos, default=todos_grupos, key="select_evolucao_grupos" )
+            if not grupos_selecionados:
+                st.warning("Selecione pelo menos um grupo.")
+            else:
+                df_filtrado = df_evolucao[df_evolucao['Atribuir a um grupo'].isin(grupos_selecionados)]
+                df_filtrado_display = df_filtrado.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
+                fig_evolucao_grupo = px.line(
+                    df_filtrado_display.sort_values('Data'),
+                    x='Data',
+                    y='Total Chamados',
+                    color='Grupo Atribuído',
+                    title='Evolução por Grupo',
+                    markers=True,
+                    labels={ "Data": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" }
+                )
+                fig_evolucao_grupo.update_layout(height=600)
+                st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
+        else: st.info("Ainda não há dados históricos suficientes.")
 except Exception as e:
     st.error(f"Erro ao carregar dados: {e}")
     st.exception(e)
