@@ -324,11 +324,9 @@ try:
 
     url_params = st.query_params.to_dict()
     scroll_target_id_on_load = None
-    clear_params_after_js = False
-
+    
     if "scroll_to" in url_params and url_params.get("scroll_to") == "encerrados":
         scroll_target_id_on_load = 'chamados-encerrados'
-        clear_params_after_js = True
     elif "faixa" in url_params:
         faixa_from_url = url_params.get("faixa")
         ordem_faixas_validas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
@@ -336,7 +334,6 @@ try:
              if 'faixa_selecionada' not in st.session_state or st.session_state.faixa_selecionada != faixa_from_url:
                  st.session_state.faixa_selecionada = faixa_from_url
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
-        clear_params_after_js = True
 
     if scroll_target_id_on_load:
         js_code = f"""
@@ -357,8 +354,7 @@ try:
         </script>
         """
         components.html(js_code, height=0)
-        if clear_params_after_js:
-             st.query_params.clear()
+        st.query_params.clear()
 
     df_atual = read_github_file(repo, "dados_atuais.csv")
     df_15dias = read_github_file(repo, "dados_15_dias.csv")
@@ -385,7 +381,7 @@ try:
     df_aging = analisar_aging(df_atual_filtrado)
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
 
-    tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"], key="main_tabs")
+    tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
 
     with tab1:
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
