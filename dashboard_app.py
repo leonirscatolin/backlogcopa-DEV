@@ -499,6 +499,17 @@ try:
         df_evolucao = carregar_dados_evolucao(repo, dias_para_analisar=dias_evolucao)
         if not df_evolucao.empty:
             df_total_diario = df_evolucao.groupby('Data')['Total Chamados'].sum().reset_index()
+
+            # --- NOVO CARD DE MÉTRICA PARA TOTAL ATUAL ---
+            if not df_total_diario.empty:
+                total_atual_evolucao = df_total_diario.iloc[-1]['Total Chamados']
+                data_total_atual = df_total_diario.iloc[-1]['Data'].strftime('%d/%m/%Y')
+                st.metric(label=f"Total Geral em {data_total_atual}", value=f"{total_atual_evolucao}")
+            else:
+                st.metric(label="Total Geral Atual", value="N/A")
+
+            st.markdown("---") # Separador visual
+
             fig_total_evolucao = px.area(
                 df_total_diario,
                 x='Data',
@@ -527,4 +538,4 @@ except Exception as e:
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.14-706 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.15-707 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
