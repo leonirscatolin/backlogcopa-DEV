@@ -206,8 +206,7 @@ def sync_ticket_data():
             json_content = json.dumps(st.session_state.observations, indent=4, ensure_ascii=False)
             commit_msg = f"Atualizando observações em {now_str}"
             update_github_file(st.session_state.repo, "ticket_observations.json", json_content.encode('utf-8'), commit_msg)
-
-        st.session_state.just_edited = True # Flag para indicar que houve edição e salvamento
+        st.session_state.just_edited = True # Define a flag APÓS salvar com sucesso
 
     st.session_state.ticket_editor['edited_rows'] = {}
 
@@ -331,7 +330,10 @@ try:
         faixa_from_url = url_params.get("faixa")
         ordem_faixas_validas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
         if faixa_from_url in ordem_faixas_validas:
-            st.session_state.faixa_selecionada = faixa_from_url
+            if 'faixa_selecionada' not in st.session_state: # Define apenas se não existir
+                st.session_state.faixa_selecionada = faixa_from_url
+            elif st.session_state.faixa_selecionada != faixa_from_url: # Atualiza se diferente
+                 st.session_state.faixa_selecionada = faixa_from_url
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
         st.query_params.clear()
 
@@ -359,6 +361,39 @@ try:
     df_15dias_filtrado = df_15dias[~df_15dias['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     df_aging = analisar_aging(df_atual_filtrado)
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
+
+    # --- LÓGICA DE SCROLL MOVIDA PARA ANTES DAS TABS ---
+    scroll_target = None
+    if scroll_target_id_on_load:
+        scroll_target = scroll_target_id_on_load
+    elif st.session_state.get('just_edited', False):
+        scroll_target = 'detalhar-e-buscar-chamados'
+        st.session_state.just_edited = False # Reseta a flag *depois* de decidir que vai rolar
+
+    if scroll_target:
+        js_code = f"""
+        <script>
+            setTimeout(() => {{
+                const element = window.parent.document.getElementById('{scroll_target}');
+                if (element) {{
+                    element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+                }} else {{
+                    // Fallback se o ID não for encontrado (ex: elemento ainda não renderizado)
+                    window.parent.scrollTo({{ top: window.parent.document.body.scrollHeight / 2, behavior: 'smooth' }});
+                }}
+                // Limpa params da URL com segurança
+                try {{
+                    const url = new URL(window.location);
+                    url.searchParams.delete('faixa');
+                    url.searchParams.delete('scroll');
+                    url.searchParams.delete('scroll_to');
+                    window.history.replaceState({{}}, '', url);
+                }} catch (e) {{ console.error("Could not clear URL parameters:", e); }}
+            }}, 350); // Delay ligeiramente maior
+        </script>
+        """
+        components.html(js_code, height=0)
+
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
     with tab1:
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
@@ -409,30 +444,7 @@ try:
             st.markdown("---")
             st.markdown("<h3 id='detalhar-e-buscar-chamados'>Detalhar e Buscar Chamados</h3>", unsafe_allow_html=True)
             st.info('Marque "Contato" se já falou com o usuário e a solicitação continua pendente. Use "Observações" para anotações.')
-            if 'just_edited' not in st.session_state: st.session_state.just_edited = False
-            scroll_target = None
-            if scroll_target_id_on_load:
-                scroll_target = scroll_target_id_on_load
-            elif st.session_state.get('just_edited', False):
-                scroll_target = 'detalhar-e-buscar-chamados'
-                st.session_state.just_edited = False
-            if scroll_target:
-                js_code = f"""
-                <script>
-                    setTimeout(() => {{
-                        const element = window.parent.document.getElementById('{scroll_target}');
-                        if (element) {{
-                            element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-                        }}
-                        const url = new URL(window.location);
-                        url.searchParams.delete('faixa');
-                        url.searchParams.delete('scroll');
-                        url.searchParams.delete('scroll_to');
-                        window.history.replaceState({{}}, '', url);
-                    }}, 300);
-                </script>
-                """
-                components.html(js_code, height=0)
+
             ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
             st.selectbox("Detalhar por faixa de idade:", options=ordem_faixas, key='faixa_selecionada')
             faixa_atual = st.session_state.faixa_selecionada
