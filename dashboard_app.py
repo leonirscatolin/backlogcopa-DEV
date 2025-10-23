@@ -20,6 +20,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# --- Funções GitHub (sem alterações) ---
 @st.cache_resource
 def get_github_repo():
     try:
@@ -181,16 +182,23 @@ def sync_ticket_data():
     edited_rows = st.session_state.ticket_editor['edited_rows']
     contact_changed = False
     observation_changed = False
+    something_saved = False # Flag para saber se algo foi realmente salvo
     for row_index, changes in edited_rows.items():
         try:
             ticket_id = str(st.session_state.last_filtered_df.iloc[row_index]['ID do ticket'])
             if 'Contato' in changes:
-                if changes['Contato']: st.session_state.contacted_tickets.add(ticket_id)
-                else: st.session_state.contacted_tickets.discard(ticket_id)
-                contact_changed = True
+                current_contact_status = ticket_id in st.session_state.contacted_tickets
+                new_contact_status = changes['Contato']
+                if current_contact_status != new_contact_status:
+                    if new_contact_status: st.session_state.contacted_tickets.add(ticket_id)
+                    else: st.session_state.contacted_tickets.discard(ticket_id)
+                    contact_changed = True
             if 'Observações' in changes:
-                st.session_state.observations[ticket_id] = changes['Observações']
-                observation_changed = True
+                current_observation = st.session_state.observations.get(ticket_id, '')
+                new_observation = changes['Observações']
+                if current_observation != new_observation:
+                    st.session_state.observations[ticket_id] = new_observation
+                    observation_changed = True
         except IndexError:
             st.warning(f"Erro ao processar linha {row_index}.")
             continue
@@ -202,14 +210,14 @@ def sync_ticket_data():
             json_content = json.dumps(data_to_save, indent=4)
             commit_msg = f"Atualizando contatos em {now_str}"
             update_github_file(st.session_state.repo, "contacted_tickets.json", json_content.encode('utf-8'), commit_msg)
+            something_saved = True
         if observation_changed:
             json_content = json.dumps(st.session_state.observations, indent=4, ensure_ascii=False)
             commit_msg = f"Atualizando observações em {now_str}"
             update_github_file(st.session_state.repo, "ticket_observations.json", json_content.encode('utf-8'), commit_msg)
-        st.session_state.just_edited = True
+            something_saved = True
 
-    st.session_state.ticket_editor['edited_rows'] = {}
-
+    st.session_state.ticket_editor['edited_rows'] = {} # Limpa sempre após a verificação
 
 @st.cache_data(ttl=3600)
 def carregar_dados_evolucao(_repo, dias_para_analisar=7):
@@ -247,12 +255,12 @@ def carregar_dados_evolucao(_repo, dias_para_analisar=7):
         st.error(f"Erro ao carregar evolução: {e}")
         return pd.DataFrame()
 
-st.html("""<style>...</style>""")
+st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
 
 logo_copa_b64 = get_image_as_base64("logo_sidebar.png")
 logo_belago_b64 = get_image_as_base64("logo_belago.png")
 if logo_copa_b64 and logo_belago_b64:
-    st.markdown(f"""...""", unsafe_allow_html=True)
+    st.markdown(f"""<div style="display: flex; justify-content: space-between; align-items: center;"><img src="data:image/png;base64,{logo_copa_b64}" width="150"><h1 style='text-align: center; margin: 0;'>Backlog Copa Energia + Belago</h1><img src="data:image/png;base64,{logo_belago_b64}" width="150"></div>""", unsafe_allow_html=True)
 else: st.error("Arquivos de logo não encontrados.")
 
 repo = get_github_repo()
@@ -308,7 +316,6 @@ if is_admin:
                     st.sidebar.success("Fechados salvos! Recarregando...")
                     st.rerun()
         else: st.sidebar.warning("Carregue o arquivo de fechados.")
-# --- CORREÇÃO DA INDENTAÇÃO AQUI ---
 elif password:
     st.sidebar.error("Senha incorreta.")
 
@@ -318,7 +325,7 @@ try:
     if 'observations' not in st.session_state:
         st.session_state.observations = read_github_json_dict(repo, "ticket_observations.json")
     if 'just_edited' not in st.session_state:
-        st.session_state.just_edited = False
+         st.session_state.just_edited = False
 
     url_params = st.query_params.to_dict()
     scroll_target_id_on_load = None
@@ -329,7 +336,7 @@ try:
         faixa_from_url = url_params.get("faixa")
         ordem_faixas_validas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
         if faixa_from_url in ordem_faixas_validas:
-            if 'faixa_selecionada' not in st.session_state or st.session_state.faixa_selecionada != faixa_from_url:
+             if 'faixa_selecionada' not in st.session_state or st.session_state.faixa_selecionada != faixa_from_url:
                  st.session_state.faixa_selecionada = faixa_from_url
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
         st.query_params.clear()
@@ -359,32 +366,21 @@ try:
     df_aging = analisar_aging(df_atual_filtrado)
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
 
-    scroll_target = None
     if scroll_target_id_on_load:
-        scroll_target = scroll_target_id_on_load
-    elif st.session_state.get('just_edited', False):
-        scroll_target = 'detalhar-e-buscar-chamados'
-
-    if scroll_target:
         js_code = f"""
         <script>
             setTimeout(() => {{
-                console.log('Attempting to scroll to: {scroll_target}');
-                const element = window.parent.document.getElementById('{scroll_target}');
+                const element = window.parent.document.getElementById('{scroll_target_id_on_load}');
                 if (element) {{
                     element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-                    console.log('Scroll successful.');
-                }} else {{
-                     console.log('Scroll target element not found.');
                 }}
             }}, 350);
         </script>
         """
         components.html(js_code, height=0)
 
-    st.session_state.just_edited = False
-
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
+
     with tab1:
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
         if not df_encerrados_filtrado.empty:
@@ -434,6 +430,7 @@ try:
             st.markdown("---")
             st.markdown("<h3 id='detalhar-e-buscar-chamados'>Detalhar e Buscar Chamados</h3>", unsafe_allow_html=True)
             st.info('Marque "Contato" se já falou com o usuário e a solicitação continua pendente. Use "Observações" para anotações.')
+
             ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
             if 'faixa_selecionada' not in st.session_state:
                  st.session_state.faixa_selecionada = "0-2 dias"
