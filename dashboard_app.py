@@ -380,6 +380,8 @@ try:
     df_15dias_filtrado = df_15dias[~df_15dias['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     df_aging = analisar_aging(df_atual_filtrado)
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
+    
+    df_evolucao_agente = carregar_dados_evolucao(repo, dias_para_analisar=7)
 
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
 
@@ -388,8 +390,7 @@ try:
         if not df_encerrados_filtrado.empty:
              info_messages.append("- Os chamados marcados como fechados no dia já foram excluídos das contagens principais e dos grupos correspondentes.")
         st.info("\n".join(info_messages))
-        
-        # --- SEÇÃO DO AGENTE DE IA ---
+
         if not df_aging.empty:
             try:
                 group_counts = df_aging['Atribuir a um grupo'].value_counts()
@@ -398,28 +399,37 @@ try:
                 total_tickets = len(df_aging)
                 top_group_percent = (top_group_count / total_tickets) * 100
                 
-                summary_title = f"🎯 Foco do Dia (Princípio de Pareto): {top_group_name}"
-                summary_text_lines = [
-                    f"Aplicando o **Princípio de Pareto (80/20)**, identificamos que o grupo **'{top_group_name}'** representa o maior gargalo do backlog, com **{top_group_count} chamados** ({top_group_percent:.0f}% do total).",
-                ]
-                
-                if len(group_counts) > 1:
-                    second_group_name = group_counts.index[1]
-                    second_group_count = group_counts.iloc[1]
-                    summary_text_lines.append(f"O segundo grupo de maior impacto é '{second_group_name}' com {second_group_count} chamados.")
+                trend_text = ""
+                if not df_evolucao_agente.empty:
+                    df_grupo_trend = df_evolucao_agente[df_evolucao_agente['Atribuir a um grupo'] == top_group_name]
+                    df_grupo_trend = df_grupo_trend.groupby('Data')['Total Chamados'].sum().sort_index()
                     
-                summary_text_lines.append(
-                    "\n**Recomendação (Scrum):** Para maximizar o impacto na redução do backlog, a equipe deve **priorizar o ataque a esta fila principal**."
-                )
-                summary_text_lines.append(
-                    "\n*Este é um resumo gerado automaticamente para direcionar os esforços diários.*"
-                )
+                    if len(df_grupo_trend) >= 2:
+                        primeiro_dia_total = df_grupo_trend.iloc[0]
+                        ultimo_dia_total = df_grupo_trend.iloc[-1]
+                        diferenca = ultimo_dia_total - primeiro_dia_total
+                        
+                        if diferenca < -1:
+                            trend_text = f"Observamos uma **tendência de redução** nesta fila nos últimos dias (de {primeiro_dia_total} para {ultimo_dia_total} chamados)."
+                        elif diferenca > 1:
+                            trend_text = f"Nota-se uma **tendência de crescimento** nesta fila nos últimos dias (de {primeiro_dia_total} para {ultimo_dia_total} chamados), exigindo atenção imediata."
+                        else:
+                            trend_text = f"Esta fila permaneceu **estável** nos últimos dias (em torno de {ultimo_dia_total} chamados)."
+                    elif len(df_grupo_trend) == 1:
+                        trend_text = "Estamos no primeiro dia de monitoramento desta fila."
+                    else:
+                        trend_text = "Aguardando mais dados de evolução para esta fila."
                 
-                with st.expander(summary_title, expanded=True):
-                    st.markdown("\n".join(summary_text_lines))
+                summary_lines = [
+                    "**Análise e Foco do Dia:**",
+                    f"O principal ponto de atenção hoje é o **'{top_group_name}'**, que concentra **{top_group_count} chamados** ({top_group_percent:.0f}% do backlog total).",
+                    f"{trend_text}",
+                    "\nO Ticket Manager já informou as equipes responsáveis e as tratativas para normalização estão em andamento."
+                ]
+                st.info("\n".join(summary_lines))
+            
             except Exception:
-                pass # Esconde o expander se houver qualquer erro no cálculo
-        # --- FIM DO AGENTE DE IA ---
+                pass 
 
         st.subheader("Análise de Antiguidade do Backlog Atual")
         texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
