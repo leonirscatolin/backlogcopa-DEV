@@ -370,13 +370,19 @@ try:
             scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
 
     if scroll_target_id_on_load:
-        # AJUSTE: Aumentando o tempo de 200ms para 300ms para garantir que o elemento renderize.
+        # AJUSTE: Aumentando o tempo para 300ms e mudando o behavior para 'auto'
         js_code = f"""
         <script>
             setTimeout(() => {{
                 const element = window.parent.document.getElementById('{scroll_target_id_on_load}');
                 if (element) {{
-                    element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+                    
+                    // ==================================================
+                    // AQUI ESTÁ A MUDANÇA: 'smooth' virou 'auto'
+                    // ==================================================
+                    element.scrollIntoView({{ behavior: 'auto', block: 'start' }});
+                    // ==================================================
+                    
                 }}
                 try {{
                     const url = new URL(window.location);
