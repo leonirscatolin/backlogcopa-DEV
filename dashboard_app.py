@@ -336,10 +336,6 @@ try:
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
 
     if scroll_target_id_on_load:
-        # ==========================================================
-        # CORREÇÃO: Removi os comentários inválidos do f-string
-        # O tempo de 550ms está mantido
-        # ==========================================================
         js_code = f"""
         <script>
             setTimeout(() => {{
@@ -354,7 +350,13 @@ try:
                     url.searchParams.delete('scroll_to');
                     window.history.replaceState({{}}, '', url);
                 }} catch (e) {{ console.error("Could not clear URL parameters:", e); }}
-            }}, 550); 
+            {""}
+            {""}
+            {""}
+            {/* ========================================================== */}
+            {/* CORREÇÃO 1: Aumentei o tempo para 800ms                 */}
+            {/* ========================================================== */}
+            }}, 800); 
         </script>
         """
         components.html(js_code, height=0)
@@ -395,9 +397,7 @@ try:
              info_messages.append("- Os chamados marcados como fechados no dia já foram excluídos das contagens principais e dos grupos correspondentes.")
         st.info("\n".join(info_messages))
 
-        # ==========================================================
         # Bloco "Análise e Foco do Dia" removido (comentado)
-        # ==========================================================
         # if not df_aging.empty:
         #     try:
         #         group_counts = df_aging['Atribuir a um grupo'].value_counts()
@@ -437,7 +437,6 @@ try:
             
         #     except Exception:
         #         pass 
-        # ==========================================================
         
         st.subheader("Análise de Antiguidade do Backlog Atual")
         texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
@@ -474,7 +473,17 @@ try:
         df_comparativo = df_comparativo[['Grupo Atribuído', '15 Dias Atrás', 'Atual', 'Diferença', 'Status']]
         st.dataframe(df_comparativo.set_index('Grupo Atribuído').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
         st.markdown("---")
-        st.markdown(f"<h3 id='chamados-encerrados'>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
+        
+        # ==========================================================
+        # CORREÇÃO 2: Âncora invisível adicionada
+        # ==========================================================
+        st.markdown("<a id='chamados-encerrados'></a>", unsafe_allow_html=True)
+        
+        # ==========================================================
+        # CORREÇÃO 3: ID removido do <h3>
+        # ==========================================================
+        st.markdown(f"<h3>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
+        
         if not df_encerrados_filtrado.empty:
             df_encerrados_display = df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']].rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
             st.data_editor(df_encerrados_display, hide_index=True, disabled=True, use_container_width=True)
