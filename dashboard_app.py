@@ -336,6 +336,10 @@ try:
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
 
     if scroll_target_id_on_load:
+        # ==========================================================
+        # CORREÇÃO: Comentários inválidos removidos.
+        # Tempo de 800ms mantido.
+        # ==========================================================
         js_code = f"""
         <script>
             setTimeout(() => {{
@@ -350,12 +354,6 @@ try:
                     url.searchParams.delete('scroll_to');
                     window.history.replaceState({{}}, '', url);
                 }} catch (e) {{ console.error("Could not clear URL parameters:", e); }}
-            {""}
-            {""}
-            {""}
-            {/* ========================================================== */}
-            {/* CORREÇÃO 1: Aumentei o tempo para 800ms                 */}
-            {/* ========================================================== */}
             }}, 800); 
         </script>
         """
@@ -474,14 +472,10 @@ try:
         st.dataframe(df_comparativo.set_index('Grupo Atribuído').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
         st.markdown("---")
         
-        # ==========================================================
-        # CORREÇÃO 2: Âncora invisível adicionada
-        # ==========================================================
+        # Âncora invisível
         st.markdown("<a id='chamados-encerrados'></a>", unsafe_allow_html=True)
         
-        # ==========================================================
-        # CORREÇÃO 3: ID removido do <h3>
-        # ==========================================================
+        # ID removido do <h3>
         st.markdown(f"<h3>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
         
         if not df_encerrados_filtrado.empty:
