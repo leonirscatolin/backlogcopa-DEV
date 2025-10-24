@@ -388,6 +388,39 @@ try:
         if not df_encerrados_filtrado.empty:
              info_messages.append("- Os chamados marcados como fechados no dia já foram excluídos das contagens principais e dos grupos correspondentes.")
         st.info("\n".join(info_messages))
+        
+        # --- SEÇÃO DO AGENTE DE IA ---
+        if not df_aging.empty:
+            try:
+                group_counts = df_aging['Atribuir a um grupo'].value_counts()
+                top_group_name = group_counts.index[0]
+                top_group_count = group_counts.iloc[0]
+                total_tickets = len(df_aging)
+                top_group_percent = (top_group_count / total_tickets) * 100
+                
+                summary_title = f"🎯 Foco do Dia (Princípio de Pareto): {top_group_name}"
+                summary_text_lines = [
+                    f"Aplicando o **Princípio de Pareto (80/20)**, identificamos que o grupo **'{top_group_name}'** representa o maior gargalo do backlog, com **{top_group_count} chamados** ({top_group_percent:.0f}% do total).",
+                ]
+                
+                if len(group_counts) > 1:
+                    second_group_name = group_counts.index[1]
+                    second_group_count = group_counts.iloc[1]
+                    summary_text_lines.append(f"O segundo grupo de maior impacto é '{second_group_name}' com {second_group_count} chamados.")
+                    
+                summary_text_lines.append(
+                    "\n**Recomendação (Scrum):** Para maximizar o impacto na redução do backlog, a equipe deve **priorizar o ataque a esta fila principal**."
+                )
+                summary_text_lines.append(
+                    "\n*Este é um resumo gerado automaticamente para direcionar os esforços diários.*"
+                )
+                
+                with st.expander(summary_title, expanded=True):
+                    st.markdown("\n".join(summary_text_lines))
+            except Exception:
+                pass # Esconde o expander se houver qualquer erro no cálculo
+        # --- FIM DO AGENTE DE IA ---
+
         st.subheader("Análise de Antiguidade do Backlog Atual")
         texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
         st.markdown(f"<p style='font-size: 0.9em; color: #666;'><i>Data de referência: {data_atual_str}{texto_hora}</i></p>", unsafe_allow_html=True)
@@ -547,4 +580,4 @@ except Exception as e:
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.20-713 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.21-714 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
