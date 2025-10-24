@@ -47,14 +47,14 @@ def update_github_file(_repo, file_path, file_content, commit_message):
             file_content = file_content.encode('utf-8')
         _repo.update_file(contents.path, commit_message, file_content, contents.sha)
         if file_path not in ["contacted_tickets.json", "ticket_observations.json"]:
-             st.sidebar.info(f"Arquivo '{file_path}' atualizado.")
+            st.sidebar.info(f"Arquivo '{file_path}' atualizado.")
     except GithubException as e:
         if e.status == 404:
             if isinstance(file_content, str):
                 file_content = file_content.encode('utf-8')
             _repo.create_file(file_path, commit_message, file_content)
             if file_path not in ["contacted_tickets.json", "ticket_observations.json"]:
-                 st.sidebar.info(f"Arquivo '{file_path}' criado.")
+                st.sidebar.info(f"Arquivo '{file_path}' criado.")
         else:
             st.sidebar.error(f"Falha ao salvar '{file_path}': {e}")
 
@@ -155,7 +155,7 @@ def analisar_aging(_df_atual):
     linhas_invalidas = df[df[date_col_name].isna()]
     if not linhas_invalidas.empty:
         with st.expander(f"⚠️ Atenção: {len(linhas_invalidas)} chamados descartados."):
-             st.dataframe(linhas_invalidas.head())
+            st.dataframe(linhas_invalidas.head())
     df.dropna(subset=[date_col_name], inplace=True)
     hoje = pd.to_datetime('today').normalize()
     data_criacao_normalizada = df[date_col_name].dt.normalize()
@@ -216,14 +216,21 @@ def sync_ticket_data():
     st.session_state.ticket_editor['edited_rows'] = {}
 
 
+# ==========================================================
+# INÍCIO DA MODIFICAÇÃO
+# ==========================================================
 @st.cache_data(ttl=3600)
-def carregar_dados_evolucao(_repo, dias_para_analisar=7):
+def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7):
     try:
         all_files_content = _repo.get_contents("snapshots")
         all_files = [f.path for f in all_files_content]
         df_evolucao_list = []
         end_date = date.today()
         start_date = end_date - timedelta(days=dias_para_analisar - 1)
+        
+        # Converter para set para performance (busca mais rápida)
+        closed_ids_set = set(closed_ticket_ids_list)
+
         for file_name in all_files:
             if file_name.startswith("snapshots/backlog_") and file_name.endswith(".csv"):
                 try:
@@ -232,8 +239,27 @@ def carregar_dados_evolucao(_repo, dias_para_analisar=7):
                     if start_date <= file_date <= end_date:
                         df_snapshot = read_github_file(_repo, file_name)
                         if not df_snapshot.empty and 'Atribuir a um grupo' in df_snapshot.columns:
-                            df_snapshot_filtrado = df_snapshot[~df_snapshot['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
-                            contagem_diaria = df_snapshot_filtrado.groupby('Atribuir a um grupo').size().reset_index(name='Total Chamados')
+                            
+                            # Filtro de RH (que já existia)
+                            df_snapshot_filtrado_rh = df_snapshot[~df_snapshot['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
+                            
+                            # Novo Filtro de Fechados
+                            # Identificar a coluna de ID no snapshot
+                            id_col_snapshot = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_snapshot_filtrado_rh.columns), None)
+                            
+                            df_snapshot_final = df_snapshot_filtrado_rh # Começa com o filtro de RH
+
+                            # Se o snapshot tiver uma coluna de ID e houver IDs fechados...
+                            if id_col_snapshot and closed_ids_set:
+                                # Limpar a coluna de ID (como feito no script principal)
+                                ids_limpos_snapshot = df_snapshot_filtrado_rh[id_col_snapshot].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+                                
+                                # Aplicar o filtro de fechados
+                                df_snapshot_final = df_snapshot_filtrado_rh[~ids_limpos_snapshot.isin(closed_ids_set)]
+                            
+                            # A contagem agora usa o df_snapshot_final
+                            contagem_diaria = df_snapshot_final.groupby('Atribuir a um grupo').size().reset_index(name='Total Chamados')
+                            
                             contagem_diaria['Data'] = pd.to_datetime(file_date)
                             df_evolucao_list.append(contagem_diaria)
                 except ValueError:
@@ -251,6 +277,9 @@ def carregar_dados_evolucao(_repo, dias_para_analisar=7):
     except Exception as e:
         st.error(f"Erro ao carregar evolução: {e}")
         return pd.DataFrame()
+# ==========================================================
+# FIM DA MODIFICAÇÃO
+# ==========================================================
 
 st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
 
@@ -331,8 +360,8 @@ try:
         faixa_from_url = url_params.get("faixa")
         ordem_faixas_validas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
         if faixa_from_url in ordem_faixas_validas:
-             if 'faixa_selecionada' not in st.session_state or st.session_state.faixa_selecionada != faixa_from_url:
-                 st.session_state.faixa_selecionada = faixa_from_url
+            if 'faixa_selecionada' not in st.session_state or st.session_state.faixa_selecionada != faixa_from_url:
+                st.session_state.faixa_selecionada = faixa_from_url
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
 
     if scroll_target_id_on_load:
@@ -368,12 +397,18 @@ try:
         st.stop()
     if 'ID do ticket' in df_atual.columns:
         df_atual['ID do ticket'] = df_atual['ID do ticket'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+    
+    # ----------------------------------------------------------------------
+    # Cálculo dos IDs Fechados (usado agora na tab3)
+    # ----------------------------------------------------------------------
     closed_ticket_ids = []
     if not df_fechados.empty:
         id_col_name = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_fechados.columns), None)
         if id_col_name:
             df_fechados[id_col_name] = df_fechados[id_col_name].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
             closed_ticket_ids = df_fechados[id_col_name].dropna().unique()
+    # ----------------------------------------------------------------------
+    
     df_encerrados = df_atual[df_atual['ID do ticket'].isin(closed_ticket_ids)]
     df_abertos = df_atual[~df_atual['ID do ticket'].isin(closed_ticket_ids)]
     df_atual_filtrado = df_abertos[~df_abertos['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
@@ -381,14 +416,16 @@ try:
     df_aging = analisar_aging(df_atual_filtrado)
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     
-    df_evolucao_agente = carregar_dados_evolucao(repo, dias_para_analisar=7)
+    # Chamada movida para ANTES da tab3 para evitar erro de cache
+    # (Não é estritamente necessário, mas garante que o slider na tab3 funcione)
+    df_evolucao_agente = carregar_dados_evolucao(repo, closed_ticket_ids_list=closed_ticket_ids, dias_para_analisar=7)
 
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
 
     with tab1:
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
         if not df_encerrados_filtrado.empty:
-             info_messages.append("- Os chamados marcados como fechados no dia já foram excluídos das contagens principais e dos grupos correspondentes.")
+            info_messages.append("- Os chamados marcados como fechados no dia já foram excluídos das contagens principais e dos grupos correspondentes.")
         st.info("\n".join(info_messages))
 
         # Bloco "Análise e Foco do Dia" foi removido
@@ -448,7 +485,7 @@ try:
             st.info('Marque "Contato" se já falou com o usuário e a solicitação continua pendente. Use "Observações" para anotações.')
             ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
             if 'faixa_selecionada' not in st.session_state:
-                 st.session_state.faixa_selecionada = "0-2 dias"
+                st.session_state.faixa_selecionada = "0-2 dias"
             st.selectbox("Detalhar por faixa de idade:", options=ordem_faixas, key='faixa_selecionada')
             faixa_atual = st.session_state.faixa_selecionada
             filtered_df = df_aging[df_aging['Faixa de Antiguidade'] == faixa_atual].copy()
@@ -518,11 +555,21 @@ try:
                 fig_stacked_bar.update_layout(height=600, xaxis_title=None, xaxis_tickangle=-45, legend_title_text='Antiguidade')
             st.plotly_chart(fig_stacked_bar, use_container_width=True)
         else: st.warning("Sem dados para gerar report visual.")
+    
     with tab3:
         st.subheader("Evolução do Backlog")
         st.info("Esta visualização ainda está coletando dados históricos. A análise completa estará disponível após alguns dias de coleta. Utilize as outras abas como referência principal por enquanto.")
         dias_evolucao = st.slider("Ver evolução dos últimos dias:", min_value=7, max_value=30, value=7, key="slider_evolucao")
-        df_evolucao = carregar_dados_evolucao(repo, dias_para_analisar=dias_evolucao)
+        
+        # ==========================================================
+        # INÍCIO DA MODIFICAÇÃO
+        # ==========================================================
+        # A lista 'closed_ticket_ids' é passada aqui
+        df_evolucao = carregar_dados_evolucao(repo, closed_ticket_ids_list=closed_ticket_ids, dias_para_analisar=dias_evolucao)
+        # ==========================================================
+        # FIM DA MODIFICAÇÃO
+        # ==========================================================
+        
         if not df_evolucao.empty:
             df_total_diario = df_evolucao.groupby('Data')['Total Chamados'].sum().reset_index()
             df_total_diario = df_total_diario.sort_values('Data')
