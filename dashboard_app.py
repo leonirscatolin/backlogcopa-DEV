@@ -216,9 +216,6 @@ def sync_ticket_data():
     st.session_state.ticket_editor['edited_rows'] = {}
 
 
-# ==========================================================
-# INÍCIO DA MODIFICAÇÃO
-# ==========================================================
 @st.cache_data(ttl=3600)
 def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7):
     try:
@@ -277,9 +274,6 @@ def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7)
     except Exception as e:
         st.error(f"Erro ao carregar evolução: {e}")
         return pd.DataFrame()
-# ==========================================================
-# FIM DA MODIFICAÇÃO
-# ==========================================================
 
 st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
 
@@ -561,14 +555,8 @@ try:
         st.info("Esta visualização ainda está coletando dados históricos. A análise completa estará disponível após alguns dias de coleta. Utilize as outras abas como referência principal por enquanto.")
         dias_evolucao = st.slider("Ver evolução dos últimos dias:", min_value=7, max_value=30, value=7, key="slider_evolucao")
         
-        # ==========================================================
-        # INÍCIO DA MODIFICAÇÃO
-        # ==========================================================
         # A lista 'closed_ticket_ids' é passada aqui
         df_evolucao = carregar_dados_evolucao(repo, closed_ticket_ids_list=closed_ticket_ids, dias_para_analisar=dias_evolucao)
-        # ==========================================================
-        # FIM DA MODIFICAÇÃO
-        # ==========================================================
         
         if not df_evolucao.empty:
             df_total_diario = df_evolucao.groupby('Data')['Total Chamados'].sum().reset_index()
@@ -583,25 +571,31 @@ try:
             )
             fig_total_evolucao.update_layout(height=400)
             st.plotly_chart(fig_total_evolucao, use_container_width=True)
+            
+            # ==========================================================
+            # INÍCIO DA MODIFICAÇÃO
+            # ==========================================================
             st.markdown("---")
-            todos_grupos = sorted(df_evolucao['Atribuir a um grupo'].unique())
-            grupos_selecionados = st.multiselect( "Selecione os grupos para visualizar:", options=todos_grupos, default=todos_grupos, key="select_evolucao_grupos" )
-            if not grupos_selecionados:
-                st.warning("Selecione pelo menos um grupo.")
-            else:
-                df_filtrado = df_evolucao[df_evolucao['Atribuir a um grupo'].isin(grupos_selecionados)]
-                df_filtrado_display = df_filtrado.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
-                fig_evolucao_grupo = px.line(
-                    df_filtrado_display.sort_values('Data'),
-                    x='Data',
-                    y='Total Chamados',
-                    color='Grupo Atribuído',
-                    title='Evolução por Grupo',
-                    markers=True,
-                    labels={ "Data": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" }
-                )
-                fig_evolucao_grupo.update_layout(height=600)
-                st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
+            
+            # O st.multiselect e a lógica if/else foram removidos daqui.
+            
+            # Renomeia a coluna e passa o dataframe completo para o gráfico
+            df_filtrado_display = df_evolucao.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
+            fig_evolucao_grupo = px.line(
+                df_filtrado_display.sort_values('Data'),
+                x='Data',
+                y='Total Chamados',
+                color='Grupo Atribuído',
+                title='Evolução por Grupo',
+                markers=True,
+                labels={ "Data": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" }
+            )
+            fig_evolucao_grupo.update_layout(height=600)
+            st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
+            # ==========================================================
+            # FIM DA MODIFICAÇÃO
+            # ==========================================================
+            
         else: st.info("Ainda não há dados históricos suficientes.")
 except Exception as e:
     st.error(f"Erro ao carregar dados: {e}")
