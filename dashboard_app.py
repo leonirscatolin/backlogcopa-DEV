@@ -445,9 +445,9 @@ try:
                 # ==========================================================
                 # AQUI ESTÁ A CORREÇÃO
                 # ==========================================================
-                # O href foi mudado de "?scroll_to=encerrados" para "#chamados-encerrados"
-                # Isso usa a âncora HTML nativa e é mais rápido, pois não recarrega a página.
-                card_fechados_html = f"""<a href="#chamados-encerrados" target="_self" class="metric-box" style="text-decoration: none;"><span class="value">{valor_fechados}</span><span class="label">Chamados Fechados no Dia</span></a>"""
+                # Adicionei o "&scroll=true" para seguir o padrão dos outros
+                # cards que acionam o seu script de rolagem.
+                card_fechados_html = f"""<a href="?scroll_to=encerrados&scroll=true" target="_self" class="metric-box" style="text-decoration: none;"><span class="value">{valor_fechados}</span><span class="label">Chamados Fechados no Dia</span></a>"""
                 # ==========================================================
                 
                 st.markdown(card_fechados_html, unsafe_allow_html=True)
@@ -474,10 +474,7 @@ try:
         df_comparativo = df_comparativo[['Grupo Atribuído', '15 Dias Atrás', 'Atual', 'Diferença', 'Status']]
         st.dataframe(df_comparativo.set_index('Grupo Atribuído').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
         st.markdown("---")
-        
-        # Este é o ID de destino para o qual o card agora aponta corretamente:
         st.markdown(f"<h3 id='chamados-encerrados'>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
-        
         if not df_encerrados_filtrado.empty:
             df_encerrados_display = df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']].rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
             st.data_editor(df_encerrados_display, hide_index=True, disabled=True, use_container_width=True)
