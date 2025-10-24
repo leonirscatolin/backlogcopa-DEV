@@ -1,4 +1,4 @@
-# VERSÃO 0.9.7-699 (MODIFICADA COM NOVAS FEATURES)
+# VERSÃO v0.9.20-713 (Base 0.9.7 + Fechados + Observações + Tab3 Nova c/ Avisos Ajustados)
 
 import streamlit as st
 import pandas as pd
@@ -42,10 +42,6 @@ def get_github_repo():
         st.error(f"Erro de conexão com o repositório: {e}")
         st.stop()
 
-# ==========================================================
-# 1. FUNÇÃO 'update_github_file' ATUALIZADA
-# (Para não logar a-salvamento das observações)
-# ==========================================================
 def update_github_file(_repo, file_path, file_content, commit_message):
     try:
         contents = _repo.get_contents(file_path)
@@ -97,10 +93,6 @@ def read_github_text_file(_repo, file_path):
     except Exception:
         return {}
 
-# ==========================================================
-# 2. FUNÇÃO 'read_github_json_dict' ADICIONADA
-# (Necessária para carregar as observações)
-# ==========================================================
 @st.cache_data(ttl=300)
 def read_github_json_dict(_repo, file_path):
     try:
@@ -190,11 +182,6 @@ def get_image_as_base64(path):
     except FileNotFoundError:
         return None
 
-# ==========================================================
-# 3. FUNÇÃO 'sync_contacted_tickets' SUBSTITUÍDA
-# (Agora 'sync_ticket_data', cuida de Contato e Observações)
-# (Mantém a lógica de scroll original: st.session_state.scroll_to_details = True)
-# ==========================================================
 def sync_ticket_data():
     if 'ticket_editor' not in st.session_state or not st.session_state.ticket_editor.get('edited_rows'):
         return
@@ -237,10 +224,6 @@ def sync_ticket_data():
     st.session_state.scroll_to_details = True # <-- Lógica de scroll original mantida
 
 
-# ==========================================================
-# 4. FUNÇÃO 'carregar_dados_evolucao' SUBSTITUÍDA
-# (Agora filtra os chamados fechados)
-# ==========================================================
 @st.cache_data(ttl=3600)
 def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7):
     try:
@@ -369,9 +352,7 @@ try:
             if e.status == 404: st.session_state.contacted_tickets = set()
             else: st.error(f"Erro ao carregar o estado dos tickets: {e}"); st.session_state.contacted_tickets = set()
 
-    # ==========================================================
-    # 5. ADIÇÃO: Carregamento das 'observations'
-    # ==========================================================
+    # Carregamento das 'observations'
     if 'observations' not in st.session_state:
         st.session_state.observations = read_github_json_dict(repo, "ticket_observations.json")
     
@@ -413,30 +394,23 @@ try:
     df_15dias_filtrado = df_15dias[~df_15dias['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     df_aging = analisar_aging(df_atual_filtrado)
     
-    # ==========================================================
-    # 6. ADIÇÃO: Definição de 'df_encerrados_filtrado' e 'df_evolucao'
-    # (Necessários para o Card e para a Tab3)
-    # ==========================================================
+    # Definição de 'df_encerrados_filtrado' e 'df_evolucao'
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
-    df_evolucao = carregar_dados_evolucao(repo, closed_ticket_ids_list=closed_ticket_ids, dias_para_analisar=7)
-    
     
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
     
     with tab1:
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
         if not df_encerrados.empty:
-            # Esta linha é do código 0.9.7 original
-            info_messages.append(f"- **{len(df_encerrados)} chamados fechados no dia** foram deduzidos das contagens principais.")
+            # Texto ajustado para usar a contagem de df_encerrados_filtrado
+            info_messages.append(f"- **{len(df_encerrados_filtrado)} chamados fechados no dia** (exceto RH) foram deduzidos das contagens principais.")
         st.info("\n".join(info_messages))
         st.subheader("Análise de Antiguidade do Backlog Atual")
         texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
         st.markdown(f"<p style='font-size: 0.9em; color: #666;'><i>Data de referência: {data_atual_str}{texto_hora}</i></p>", unsafe_allow_html=True)
         if not df_aging.empty:
             
-            # ==========================================================
-            # 7. ALTERAÇÃO: Cards de Métrica (Total + Fechados)
-            # ==========================================================
+            # Cards de Métrica (Total + Fechados)
             total_chamados = len(df_aging)
             total_fechados = len(df_encerrados_filtrado)
             col_spacer1, col_total, col_fechados, col_spacer2 = st.columns([1, 1.5, 1.5, 1])
@@ -446,7 +420,6 @@ try:
                 valor_fechados = total_fechados if total_fechados > 0 else "N/A"
                 card_fechados_html = f"""<div class="metric-box"><span class="value">{valor_fechados}</span><span class="label">Chamados Fechados no Dia</span></div>"""
                 st.markdown(card_fechados_html, unsafe_allow_html=True)
-            # ==========================================================
             
             st.markdown("---")
             aging_counts = df_aging['Faixa de Antiguidade'].value_counts().reset_index()
@@ -475,11 +448,21 @@ try:
         st.dataframe(df_comparativo.set_index('Grupo').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
         st.markdown("---")
         st.markdown(f"<h3>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
-        if not df_encerrados.empty:
-            # (a definição de df_encerrados_filtrado foi movida para cima)
+        
+        # ==========================================================
+        # INÍCIO DA MODIFICAÇÃO (Mensagem de Chamados Encerrados)
+        # ==========================================================
+        if df_fechados.empty:
+            st.info("O arquivo de chamados encerrados ainda não foi carregado.")
+        elif not df_encerrados_filtrado.empty:
             st.data_editor(df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']], hide_index=True, disabled=True, use_container_width=True)
         else:
-            st.info("Nenhum chamado da lista de fechados foi encontrado no backlog atual ou o arquivo de encerrados não foi carregado.")
+            # Caso o arquivo de fechados exista, mas os IDs não batam ou sejam todos RH
+            st.info("Nenhum chamado (exceto RH) da lista de fechados foi encontrado no backlog atual.")
+        # ==========================================================
+        # FIM DA MODIFICAÇÃO
+        # ==========================================================
+
         if not df_aging.empty:
             st.markdown("---")
             st.subheader("Detalhar e Buscar Chamados")
@@ -501,25 +484,31 @@ try:
                 def highlight_row(row):
                     return ['background-color: #fff8c4'] * len(row) if row['Contato'] else [''] * len(row)
                 
-                # ==========================================================
-                # 8. ALTERAÇÃO: Inclusão da coluna 'Observações' no data_editor
-                # ==========================================================
+                # Inclusão da coluna 'Observações' no data_editor
                 filtered_df['Contato'] = filtered_df['ID do ticket'].apply(lambda id: str(id) in st.session_state.contacted_tickets)
                 filtered_df['Observações'] = filtered_df['ID do ticket'].apply(lambda id: st.session_state.observations.get(str(id), '')) # <-- ADICIONADO
                 
                 st.session_state.last_filtered_df = filtered_df.reset_index(drop=True)
                 
-                colunas_para_exibir = ['Contato', 'ID do ticket', 'Descrição', 'Atribuir a um grupo', 'Dias em Aberto', 'Data de criação', 'Observações'] # <-- ADICIONADO
+                # 'Observações' adicionada à lista
+                colunas_para_exibir_renomeadas = {
+                    'Contato': 'Contato', 
+                    'ID do ticket': 'ID do ticket', 
+                    'Descrição': 'Descrição', 
+                    'Atribuir a um grupo': 'Grupo Atribuído', 
+                    'Dias em Aberto': 'Dias em Aberto', 
+                    'Data de criação': 'Data de criação', 
+                    'Observações': 'Observações' # <-- ADICIONADO
+                }
                 
                 st.data_editor(
-                    st.session_state.last_filtered_df[colunas_para_exibir].style.apply(highlight_row, axis=1), 
+                    st.session_state.last_filtered_df.rename(columns=colunas_para_exibir_renomeadas)[list(colunas_para_exibir_renomeadas.values())].style.apply(highlight_row, axis=1),
                     use_container_width=True, 
                     hide_index=True, 
-                    disabled=['ID do ticket', 'Descrição', 'Atribuir a um grupo', 'Dias em Aberto', 'Data de criação'], # 'Observações' é editável
+                    disabled=['ID do ticket', 'Descrição', 'Grupo Atribuído', 'Dias em Aberto', 'Data de criação'], # 'Observações' é editável
                     key='ticket_editor', 
                     on_change=sync_ticket_data # <-- ATUALIZADO
                 )
-                # ==========================================================
             else:
                 st.info("Não há chamados nesta categoria.")
             st.subheader("Buscar Chamados por Grupo")
@@ -585,18 +574,20 @@ try:
             st.warning("Nenhum dado para gerar o report visual.")
 
     # ==========================================================
-    # 9. ALTERAÇÃO: Bloco 'with tab3:' INTEIRO substituído
+    # INÍCIO DA MODIFICAÇÃO (Avisos da Tab 3)
     # ==========================================================
     with tab3:
         st.subheader("Evolução do Backlog")
-        st.info("Esta visualização já filtra os chamados fechados e permite filtrar grupos clicando na legenda.")
         dias_evolucao = st.slider("Ver evolução dos últimos dias:", min_value=7, max_value=30, value=7, key="slider_evolucao")
         
-        # O df_evolucao foi calculado antes das tabs, usando o slider
-        # Precisamos re-calcular aqui se o slider for mexido
+        # Recalcula os dados da evolução com base no slider
         df_evolucao_tab3 = carregar_dados_evolucao(repo, closed_ticket_ids_list=closed_ticket_ids, dias_para_analisar=dias_evolucao)
         
         if not df_evolucao_tab3.empty:
+            
+            # Aviso 1: Para o gráfico de Total Geral
+            st.info("Esta visualização ainda está coletando dados históricos. Utilize as outras abas como referência principal por enquanto.")
+            
             df_total_diario = df_evolucao_tab3.groupby('Data')['Total Chamados'].sum().reset_index()
             df_total_diario = df_total_diario.sort_values('Data')
             fig_total_evolucao = px.area(
@@ -612,6 +603,10 @@ try:
             
             st.markdown("---")
             
+            # Aviso 2: Para o gráfico de Evolução por Grupo
+            st.info("Esta visualização já filtra os chamados fechados e permite filtrar grupos clicando 2x na legenda.")
+
+            # Gráfico de linhas sem o multiselect
             df_filtrado_display = df_evolucao_tab3.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
             fig_evolucao_grupo = px.line(
                 df_filtrado_display.sort_values('Data'),
@@ -626,10 +621,14 @@ try:
             st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
             
         else: st.info("Ainda não há dados históricos suficientes.")
+    # ==========================================================
+    # FIM DA MODIFICAÇÃO
+    # ==========================================================
 
 except Exception as e:
     st.error(f"Ocorreu um erro ao carregar os dados: {e}")
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.7-699 | Este dashboard está em desenvolvimento.</p>""", unsafe_allow_html=True)
+# Rodapé atualizado para a versão solicitada
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.20-713 | Este dashboard está em desenvolvimento.</p>""", unsafe_allow_html=True)
