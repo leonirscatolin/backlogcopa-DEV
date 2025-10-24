@@ -345,21 +345,32 @@ try:
     if 'observations' not in st.session_state:
         st.session_state.observations = read_github_json_dict(repo, "ticket_observations.json")
 
+    # ==========================================================
+    # INÍCIO DA CORREÇÃO DO SCROLL
+    # ==========================================================
     url_params = st.query_params.to_dict()
     scroll_target_id_on_load = None
     
-    if "scroll_to" in url_params and url_params.get("scroll_to") == "encerrados":
+    # CORREÇÃO: st.query_params.to_dict() retorna listas. Ex: {'faixa': ['0-2 dias']}
+    # Precisamos pegar o primeiro item da lista com [0].
+    
+    scroll_to_val = url_params.get("scroll_to", [None])[0]
+    
+    if scroll_to_val == "encerrados":
         scroll_target_id_on_load = 'chamados-encerrados'
     elif "faixa" in url_params:
-        faixa_from_url = url_params.get("faixa")
+        faixa_from_url = url_params.get("faixa")[0] # <-- CORREÇÃO [0]
         ordem_faixas_validas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
         if faixa_from_url in ordem_faixas_validas:
             if 'faixa_selecionada' not in st.session_state or st.session_state.faixa_selecionada != faixa_from_url:
                 st.session_state.faixa_selecionada = faixa_from_url
-        scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
+        
+        # CORREÇÃO: O scroll só deve ser ativado se o param "scroll" estiver presente (veio do clique)
+        if "scroll" in url_params:
+            scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
 
     if scroll_target_id_on_load:
-        # O timeout de 200ms da última tentativa está mantido
+        # AJUSTE: Aumentando o tempo de 200ms para 300ms para garantir que o elemento renderize.
         js_code = f"""
         <script>
             setTimeout(() => {{
@@ -374,10 +385,13 @@ try:
                     url.searchParams.delete('scroll_to');
                     window.history.replaceState({{}}, '', url);
                 }} catch (e) {{ console.error("Could not clear URL parameters:", e); }}
-            }}, 200); 
+            }}, 300); 
         </script>
         """
         components.html(js_code, height=0)
+    # ==========================================================
+    # FIM DA CORREÇÃO DO SCROLL
+    # ==========================================================
 
     df_atual = read_github_file(repo, "dados_atuais.csv")
     df_15dias = read_github_file(repo, "dados_15_dias.csv")
@@ -572,9 +586,6 @@ try:
             fig_total_evolucao.update_layout(height=400)
             st.plotly_chart(fig_total_evolucao, use_container_width=True)
             
-            # ==========================================================
-            # INÍCIO DA MODIFICAÇÃO
-            # ==========================================================
             st.markdown("---")
             
             # O st.multiselect e a lógica if/else foram removidos daqui.
@@ -592,9 +603,6 @@ try:
             )
             fig_evolucao_grupo.update_layout(height=600)
             st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
-            # ==========================================================
-            # FIM DA MODIFICAÇÃO
-            # ==========================================================
             
         else: st.info("Ainda não há dados históricos suficientes.")
 except Exception as e:
