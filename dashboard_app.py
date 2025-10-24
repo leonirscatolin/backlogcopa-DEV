@@ -336,10 +336,7 @@ try:
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
 
     if scroll_target_id_on_load:
-        # ==========================================================
-        # CORREÇÃO: Comentários inválidos removidos.
-        # Tempo de 800ms mantido.
-        # ==========================================================
+        # Tempo de 800ms mantido
         js_code = f"""
         <script>
             setTimeout(() => {{
@@ -415,21 +412,13 @@ try:
         #                 diferenca = ultimo_dia_total - primeiro_dia_total
                         
         #                 if diferenca < -1:
-        #                     trend_text = f"Observamos uma **tendência de redução** nesta fila nos últimos dias (de {primeiro_dia_total} para {ultimo_dia_total} chamados)."
-        #                 elif diferenca > 1:
-        #                     trend_text = f"Nota-se uma **tendência de crescimento** nesta fila nos últimos dias (de {primeiro_dia_total} para {ultimo_dia_total} chamados), exigindo atenção imediata."
-        #                 else:
-        #                     trend_text = f"Esta fila permaneceu **estável** nos últimos dias (em torno de {ultimo_dia_total} chamados)."
-        #             elif len(df_grupo_trend) == 1:
-        #                 trend_text = "Estamos no primeiro dia de monitoramento desta fila."
+        ...
         #             else:
         #                 trend_text = "Aguardando mais dados de evolução para esta fila."
                 
         #         summary_lines = [
         #             "**Análise e Foco do Dia:**",
-        #             f"O principal ponto de atenção hoje é o **'{top_group_name}'**, que concentra **{top_group_count} chamados** ({top_group_percent:.0f}% do backlog total).",
-        #             f"{trend_text}",
-        #             "\nO Ticket Manager já informou as equipes responsáveis e as tratativas para normalização estão em andamento."
+        ...
         #         ]
         #         st.info("\n".join(summary_lines))
             
@@ -472,11 +461,15 @@ try:
         st.dataframe(df_comparativo.set_index('Grupo Atribuído').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
         st.markdown("---")
         
-        # Âncora invisível
-        st.markdown("<a id='chamados-encerrados'></a>", unsafe_allow_html=True)
+        # ==========================================================
+        # CORREÇÃO: Âncora invisível removida
+        # ==========================================================
+        # st.markdown("<a id='chamados-encerrados'></a>", unsafe_allow_html=True)
         
-        # ID removido do <h3>
-        st.markdown(f"<h3>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
+        # ==========================================================
+        # CORREÇÃO: ID retornado para o <h3>
+        # ==========================================================
+        st.markdown(f"<h3 id='chamados-encerrados'>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
         
         if not df_encerrados_filtrado.empty:
             df_encerrados_display = df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']].rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
