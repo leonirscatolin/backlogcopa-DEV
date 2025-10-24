@@ -335,27 +335,6 @@ try:
                  st.session_state.faixa_selecionada = faixa_from_url
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
 
-    if scroll_target_id_on_load:
-        js_code = f"""
-        <script>
-            setTimeout(() => {{
-                const element = window.parent.document.getElementById('{scroll_target_id_on_load}');
-                if (element) {{
-                    element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-                }}
-                try {{
-                    const url = new URL(window.location);
-                    url.searchParams.delete('faixa');
-                    url.searchParams.delete('scroll');
-                    url.searchParams.delete('scroll_to');
-                    window.history.replaceState({{}}, '', url);
-                }} catch (e) {{ console.error("Could not clear URL parameters:", e); }}
-            }}, 350);
-        </script>
-        """
-        components.html(js_code, height=0)
-        st.query_params.clear()
-
     df_atual = read_github_file(repo, "dados_atuais.csv")
     df_15dias = read_github_file(repo, "dados_15_dias.csv")
     df_fechados = read_github_file(repo, "dados_fechados.csv")
@@ -380,56 +359,35 @@ try:
     df_15dias_filtrado = df_15dias[~df_15dias['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     df_aging = analisar_aging(df_atual_filtrado)
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
-    
-    df_evolucao_agente = carregar_dados_evolucao(repo, dias_para_analisar=7)
 
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
 
     with tab1:
+        if scroll_target_id_on_load:
+            js_code = f"""
+            <script>
+                setTimeout(() => {{
+                    const element = window.parent.document.getElementById('{scroll_target_id_on_load}');
+                    if (element) {{
+                        element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+                    }}
+                    try {{
+                        const url = new URL(window.location);
+                        url.searchParams.delete('faixa');
+                        url.searchParams.delete('scroll');
+                        url.searchParams.delete('scroll_to');
+                        window.history.replaceState({{}}, '', url);
+                    }} catch (e) {{ console.error("Could not clear URL parameters:", e); }}
+                }}, 350);
+            </script>
+            """
+            components.html(js_code, height=0)
+            st.query_params.clear()
+
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
         if not df_encerrados_filtrado.empty:
              info_messages.append("- Os chamados marcados como fechados no dia já foram excluídos das contagens principais e dos grupos correspondentes.")
         st.info("\n".join(info_messages))
-
-        if not df_aging.empty:
-            try:
-                group_counts = df_aging['Atribuir a um grupo'].value_counts()
-                top_group_name = group_counts.index[0]
-                top_group_count = group_counts.iloc[0]
-                total_tickets = len(df_aging)
-                top_group_percent = (top_group_count / total_tickets) * 100
-                
-                trend_text = ""
-                if not df_evolucao_agente.empty:
-                    df_grupo_trend = df_evolucao_agente[df_evolucao_agente['Atribuir a um grupo'] == top_group_name]
-                    df_grupo_trend = df_grupo_trend.groupby('Data')['Total Chamados'].sum().sort_index()
-                    
-                    if len(df_grupo_trend) >= 2:
-                        primeiro_dia_total = df_grupo_trend.iloc[0]
-                        ultimo_dia_total = df_grupo_trend.iloc[-1]
-                        diferenca = ultimo_dia_total - primeiro_dia_total
-                        
-                        if diferenca < -1:
-                            trend_text = f"Observamos uma **tendência de redução** nesta fila nos últimos dias (de {primeiro_dia_total} para {ultimo_dia_total} chamados)."
-                        elif diferenca > 1:
-                            trend_text = f"Nota-se uma **tendência de crescimento** nesta fila nos últimos dias (de {primeiro_dia_total} para {ultimo_dia_total} chamados), exigindo atenção imediata."
-                        else:
-                            trend_text = f"Esta fila permaneceu **estável** nos últimos dias (em torno de {ultimo_dia_total} chamados)."
-                    elif len(df_grupo_trend) == 1:
-                        trend_text = "Estamos no primeiro dia de monitoramento desta fila."
-                    else:
-                        trend_text = "Aguardando mais dados de evolução para esta fila."
-                
-                summary_lines = [
-                    "**Análise e Foco do Dia:**",
-                    f"O principal ponto de atenção hoje é o **'{top_group_name}'**, que concentra **{top_group_count} chamados** ({top_group_percent:.0f}% do backlog total).",
-                    f"{trend_text}",
-                    "\nO Ticket Manager já informou as equipes responsáveis e as tratativas para normalização estão em andamento."
-                ]
-                st.info("\n".join(summary_lines))
-            
-            except Exception:
-                pass 
 
         st.subheader("Análise de Antiguidade do Backlog Atual")
         texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
@@ -590,4 +548,4 @@ except Exception as e:
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.21-714 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.20-713 | Dashboard em desenvolvimento.</p>""", unsafe_allow_html=True)
