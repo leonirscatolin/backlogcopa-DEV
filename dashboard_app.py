@@ -336,9 +336,7 @@ try:
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
 
     if scroll_target_id_on_load:
-        # ==========================================================
-        # CORREÇÃO: Tempo REDUZIDO para 200ms
-        # ==========================================================
+        # O timeout de 200ms da última tentativa está mantido
         js_code = f"""
         <script>
             setTimeout(() => {{
@@ -403,10 +401,16 @@ try:
             total_fechados = len(df_encerrados_filtrado)
             col_spacer1, col_total, col_fechados, col_spacer2 = st.columns([1, 1.5, 1.5, 1])
             with col_total: st.markdown(f"""<div class="metric-box"><span class="value">{total_chamados}</span><span class="label">Total de Chamados Abertos</span></div>""", unsafe_allow_html=True)
+            
+            # ==========================================================
+            # CORREÇÃO: Card de fechados não é mais clicável
+            # ==========================================================
             with col_fechados:
                 valor_fechados = total_fechados if total_fechados > 0 else "N/A"
-                card_fechados_html = f"""<a href="?scroll_to=encerrados&scroll=true" target="_self" class="metric-box" style="text-decoration: none;"><span class="value">{valor_fechados}</span><span class="label">Chamados Fechados no Dia</span></a>"""
+                card_fechados_html = f"""<div class="metric-box"><span class="value">{valor_fechados}</span><span class="label">Chamados Fechados no Dia</span></div>"""
                 st.markdown(card_fechados_html, unsafe_allow_html=True)
+            # ==========================================================
+
             st.markdown("---")
             aging_counts = df_aging['Faixa de Antiguidade'].value_counts().reset_index()
             aging_counts.columns = ['Faixa de Antiguidade', 'Quantidade']
@@ -431,7 +435,7 @@ try:
         st.dataframe(df_comparativo.set_index('Grupo Atribuído').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
         st.markdown("---")
         
-        # ID está no H3, para o alinhamento correto
+        # ID está no H3 (não é mais usado para scroll, mas pode ser usado no futuro)
         st.markdown(f"<h3 id='chamados-encerrados'>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
         
         if not df_encerrados_filtrado.empty:
