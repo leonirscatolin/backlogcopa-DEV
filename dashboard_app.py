@@ -336,6 +336,10 @@ try:
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
 
     if scroll_target_id_on_load:
+        # ==========================================================
+        # CORREÇÃO: Removi os comentários inválidos do f-string
+        # O tempo de 550ms está mantido
+        # ==========================================================
         js_code = f"""
         <script>
             setTimeout(() => {{
@@ -350,12 +354,6 @@ try:
                     url.searchParams.delete('scroll_to');
                     window.history.replaceState({{}}, '', url);
                 }} catch (e) {{ console.error("Could not clear URL parameters:", e); }}
-            {""}
-            {""}
-            {""}
-            {/* ========================================================== */}
-            {/* CORREÇÃO 1: Aumentei o tempo de 350 para 550            */}
-            {/* ========================================================== */}
             }}, 550); 
         </script>
         """
@@ -398,7 +396,7 @@ try:
         st.info("\n".join(info_messages))
 
         # ==========================================================
-        # CORREÇÃO 2: Removi o bloco "Análise e Foco do Dia"
+        # Bloco "Análise e Foco do Dia" removido (comentado)
         # ==========================================================
         # if not df_aging.empty:
         #     try:
@@ -451,7 +449,6 @@ try:
             with col_total: st.markdown(f"""<div class="metric-box"><span class="value">{total_chamados}</span><span class="label">Total de Chamados Abertos</span></div>""", unsafe_allow_html=True)
             with col_fechados:
                 valor_fechados = total_fechados if total_fechados > 0 else "N/A"
-                # O link abaixo está correto e vai acionar o script de scroll (que agora tem o timeout maior)
                 card_fechados_html = f"""<a href="?scroll_to=encerrados&scroll=true" target="_self" class="metric-box" style="text-decoration: none;"><span class="value">{valor_fechados}</span><span class="label">Chamados Fechados no Dia</span></a>"""
                 st.markdown(card_fechados_html, unsafe_allow_html=True)
             st.markdown("---")
