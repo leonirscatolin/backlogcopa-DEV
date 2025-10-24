@@ -350,7 +350,13 @@ try:
                     url.searchParams.delete('scroll_to');
                     window.history.replaceState({{}}, '', url);
                 }} catch (e) {{ console.error("Could not clear URL parameters:", e); }}
-            }}, 350);
+            {""}
+            {""}
+            {""}
+            {/* ========================================================== */}
+            {/* CORREÇÃO 1: Aumentei o tempo de 350 para 550            */}
+            {/* ========================================================== */}
+            }}, 550); 
         </script>
         """
         components.html(js_code, height=0)
@@ -391,45 +397,49 @@ try:
              info_messages.append("- Os chamados marcados como fechados no dia já foram excluídos das contagens principais e dos grupos correspondentes.")
         st.info("\n".join(info_messages))
 
-        if not df_aging.empty:
-            try:
-                group_counts = df_aging['Atribuir a um grupo'].value_counts()
-                top_group_name = group_counts.index[0]
-                top_group_count = group_counts.iloc[0]
-                total_tickets = len(df_aging)
-                top_group_percent = (top_group_count / total_tickets) * 100
+        # ==========================================================
+        # CORREÇÃO 2: Removi o bloco "Análise e Foco do Dia"
+        # ==========================================================
+        # if not df_aging.empty:
+        #     try:
+        #         group_counts = df_aging['Atribuir a um grupo'].value_counts()
+        #         top_group_name = group_counts.index[0]
+        #         top_group_count = group_counts.iloc[0]
+        #         total_tickets = len(df_aging)
+        #         top_group_percent = (top_group_count / total_tickets) * 100
                 
-                trend_text = ""
-                if not df_evolucao_agente.empty:
-                    df_grupo_trend = df_evolucao_agente[df_evolucao_agente['Atribuir a um grupo'] == top_group_name]
-                    df_grupo_trend = df_grupo_trend.groupby('Data')['Total Chamados'].sum().sort_index()
+        #         trend_text = ""
+        #         if not df_evolucao_agente.empty:
+        #             df_grupo_trend = df_evolucao_agente[df_evolucao_agente['Atribuir a um grupo'] == top_group_name]
+        #             df_grupo_trend = df_grupo_trend.groupby('Data')['Total Chamados'].sum().sort_index()
                     
-                    if len(df_grupo_trend) >= 2:
-                        primeiro_dia_total = df_grupo_trend.iloc[0]
-                        ultimo_dia_total = df_grupo_trend.iloc[-1]
-                        diferenca = ultimo_dia_total - primeiro_dia_total
+        #             if len(df_grupo_trend) >= 2:
+        #                 primeiro_dia_total = df_grupo_trend.iloc[0]
+        #                 ultimo_dia_total = df_grupo_trend.iloc[-1]
+        #                 diferenca = ultimo_dia_total - primeiro_dia_total
                         
-                        if diferenca < -1:
-                            trend_text = f"Observamos uma **tendência de redução** nesta fila nos últimos dias (de {primeiro_dia_total} para {ultimo_dia_total} chamados)."
-                        elif diferenca > 1:
-                            trend_text = f"Nota-se uma **tendência de crescimento** nesta fila nos últimos dias (de {primeiro_dia_total} para {ultimo_dia_total} chamados), exigindo atenção imediata."
-                        else:
-                            trend_text = f"Esta fila permaneceu **estável** nos últimos dias (em torno de {ultimo_dia_total} chamados)."
-                    elif len(df_grupo_trend) == 1:
-                        trend_text = "Estamos no primeiro dia de monitoramento desta fila."
-                    else:
-                        trend_text = "Aguardando mais dados de evolução para esta fila."
+        #                 if diferenca < -1:
+        #                     trend_text = f"Observamos uma **tendência de redução** nesta fila nos últimos dias (de {primeiro_dia_total} para {ultimo_dia_total} chamados)."
+        #                 elif diferenca > 1:
+        #                     trend_text = f"Nota-se uma **tendência de crescimento** nesta fila nos últimos dias (de {primeiro_dia_total} para {ultimo_dia_total} chamados), exigindo atenção imediata."
+        #                 else:
+        #                     trend_text = f"Esta fila permaneceu **estável** nos últimos dias (em torno de {ultimo_dia_total} chamados)."
+        #             elif len(df_grupo_trend) == 1:
+        #                 trend_text = "Estamos no primeiro dia de monitoramento desta fila."
+        #             else:
+        #                 trend_text = "Aguardando mais dados de evolução para esta fila."
                 
-                summary_lines = [
-                    "**Análise e Foco do Dia:**",
-                    f"O principal ponto de atenção hoje é o **'{top_group_name}'**, que concentra **{top_group_count} chamados** ({top_group_percent:.0f}% do backlog total).",
-                    f"{trend_text}",
-                    "\nO Ticket Manager já informou as equipes responsáveis e as tratativas para normalização estão em andamento."
-                ]
-                st.info("\n".join(summary_lines))
+        #         summary_lines = [
+        #             "**Análise e Foco do Dia:**",
+        #             f"O principal ponto de atenção hoje é o **'{top_group_name}'**, que concentra **{top_group_count} chamados** ({top_group_percent:.0f}% do backlog total).",
+        #             f"{trend_text}",
+        #             "\nO Ticket Manager já informou as equipes responsáveis e as tratativas para normalização estão em andamento."
+        #         ]
+        #         st.info("\n".join(summary_lines))
             
-            except Exception:
-                pass 
+        #     except Exception:
+        #         pass 
+        # ==========================================================
         
         st.subheader("Análise de Antiguidade do Backlog Atual")
         texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
@@ -441,15 +451,8 @@ try:
             with col_total: st.markdown(f"""<div class="metric-box"><span class="value">{total_chamados}</span><span class="label">Total de Chamados Abertos</span></div>""", unsafe_allow_html=True)
             with col_fechados:
                 valor_fechados = total_fechados if total_fechados > 0 else "N/A"
-                
-                # ==========================================================
-                # AQUI ESTÁ A CORREÇÃO
-                # ==========================================================
-                # Adicionei o "&scroll=true" para seguir o padrão dos outros
-                # cards que acionam o seu script de rolagem.
+                # O link abaixo está correto e vai acionar o script de scroll (que agora tem o timeout maior)
                 card_fechados_html = f"""<a href="?scroll_to=encerrados&scroll=true" target="_self" class="metric-box" style="text-decoration: none;"><span class="value">{valor_fechados}</span><span class="label">Chamados Fechados no Dia</span></a>"""
-                # ==========================================================
-                
                 st.markdown(card_fechados_html, unsafe_allow_html=True)
             st.markdown("---")
             aging_counts = df_aging['Faixa de Antiguidade'].value_counts().reset_index()
