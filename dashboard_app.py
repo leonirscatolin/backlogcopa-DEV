@@ -337,7 +337,7 @@ try:
 
     if scroll_target_id_on_load:
         # ==========================================================
-        # CORREÇÃO 1: Tempo aumentado para 1200ms
+        # CORREÇÃO: Tempo REDUZIDO para 200ms
         # ==========================================================
         js_code = f"""
         <script>
@@ -353,7 +353,7 @@ try:
                     url.searchParams.delete('scroll_to');
                     window.history.replaceState({{}}, '', url);
                 }} catch (e) {{ console.error("Could not clear URL parameters:", e); }}
-            }}, 1200); 
+            }}, 200); 
         </script>
         """
         components.html(js_code, height=0)
@@ -393,10 +393,7 @@ try:
              info_messages.append("- Os chamados marcados como fechados no dia já foram excluídos das contagens principais e dos grupos correspondentes.")
         st.info("\n".join(info_messages))
 
-        # ==========================================================
-        # CORREÇÃO 2: Bloco "Análise e Foco do Dia" REMOVIDO
-        # (Não está mais comentado, foi deletado para evitar o bug do Ellipsis)
-        # ==========================================================
+        # Bloco "Análise e Foco do Dia" foi removido
         
         st.subheader("Análise de Antiguidade do Backlog Atual")
         texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
@@ -434,7 +431,7 @@ try:
         st.dataframe(df_comparativo.set_index('Grupo Atribuído').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
         st.markdown("---")
         
-        # O ID está de volta no H3, como estava na versão que funcionou o alinhamento
+        # ID está no H3, para o alinhamento correto
         st.markdown(f"<h3 id='chamados-encerrados'>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
         
         if not df_encerrados_filtrado.empty:
