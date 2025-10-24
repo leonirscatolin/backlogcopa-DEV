@@ -346,7 +346,7 @@ try:
         st.session_state.observations = read_github_json_dict(repo, "ticket_observations.json")
 
     # ==========================================================
-    # INÍCIO DA CORREÇÃO DO SCROLL
+    # INÍCIO DA CORREÇÃO DO SCROLL E FILTRO
     # ==========================================================
     url_params = st.query_params.to_dict()
     scroll_target_id_on_load = None
@@ -358,37 +358,36 @@ try:
     
     if scroll_to_val == "encerrados":
         scroll_target_id_on_load = 'chamados-encerrados'
+    
+    # LÓGICA DE FILTRO: Sempre verificar se 'faixa' está na URL
     elif "faixa" in url_params:
         faixa_from_url = url_params.get("faixa")[0] # <-- CORREÇÃO [0]
         ordem_faixas_validas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
         if faixa_from_url in ordem_faixas_validas:
-            if 'faixa_selecionada' not in st.session_state or st.session_state.faixa_selecionada != faixa_from_url:
-                st.session_state.faixa_selecionada = faixa_from_url
+            # Atualiza o session_state para garantir que o filtro seja aplicado
+            st.session_state.faixa_selecionada = faixa_from_url
         
-        # CORREÇÃO: O scroll só deve ser ativado se o param "scroll" estiver presente (veio do clique)
+        # LÓGICA DE SCROLL: Só rolar se 'scroll=true' (do clique) estiver presente
         if "scroll" in url_params:
             scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
 
     if scroll_target_id_on_load:
-        # AJUSTE: Aumentando o tempo para 300ms e mudando o behavior para 'auto'
+        # AJUSTE: Aumentando o tempo para 300ms e mantendo 'auto'
         js_code = f"""
         <script>
             setTimeout(() => {{
                 const element = window.parent.document.getElementById('{scroll_target_id_on_load}');
                 if (element) {{
-                    
-                    // ==================================================
-                    // AQUI ESTÁ A MUDANÇA: 'smooth' virou 'auto'
-                    // ==================================================
                     element.scrollIntoView({{ behavior: 'auto', block: 'start' }});
-                    // ==================================================
-                    
                 }}
                 try {{
                     const url = new URL(window.location);
-                    url.searchParams.delete('faixa');
+                    // ==================================================
+                    // AQUI ESTÁ A MUDANÇA: Não deletamos 'faixa'
+                    // ==================================================
                     url.searchParams.delete('scroll');
                     url.searchParams.delete('scroll_to');
+                    // ==================================================
                     window.history.replaceState({{}}, '', url);
                 }} catch (e) {{ console.error("Could not clear URL parameters:", e); }}
             }}, 300); 
@@ -396,7 +395,7 @@ try:
         """
         components.html(js_code, height=0)
     # ==========================================================
-    # FIM DA CORREÇÃO DO SCROLL
+    # FIM DA CORREÇÃO
     # ==========================================================
 
     df_atual = read_github_file(repo, "dados_atuais.csv")
@@ -470,7 +469,11 @@ try:
             aging_counts = pd.merge(todas_as_faixas, aging_counts, on='Faixa de Antiguidade', how='left').fillna(0).astype({'Quantidade': int})
             aging_counts['Faixa de Antiguidade'] = pd.Categorical(aging_counts['Faixa de Antiguidade'], categories=ordem_faixas, ordered=True)
             aging_counts = aging_counts.sort_values('Faixa de Antiguidade')
-            if 'faixa_selecionada' not in st.session_state: st.session_state.faixa_selecionada = "0-2 dias"
+            
+            # Define o default do session state, caso não exista (importante para a primeira carga)
+            if 'faixa_selecionada' not in st.session_state: 
+                st.session_state.faixa_selecionada = "0-2 dias"
+            
             cols = st.columns(len(ordem_faixas))
             for i, row in aging_counts.iterrows():
                 with cols[i]:
@@ -498,10 +501,16 @@ try:
             st.markdown("<h3 id='detalhar-e-buscar-chamados'>Detalhar e Buscar Chamados</h3>", unsafe_allow_html=True)
             st.info('Marque "Contato" se já falou com o usuário e a solicitação continua pendente. Use "Observações" para anotações.')
             ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
+            
+            # O st.session_state.faixa_selecionada já foi definido pela lógica da URL
             if 'faixa_selecionada' not in st.session_state:
                 st.session_state.faixa_selecionada = "0-2 dias"
+            
             st.selectbox("Detalhar por faixa de idade:", options=ordem_faixas, key='faixa_selecionada')
+            
+            # O selectbox atualiza o st.session_state, então podemos lê-lo diretamente
             faixa_atual = st.session_state.faixa_selecionada
+            
             filtered_df = df_aging[df_aging['Faixa de Antiguidade'] == faixa_atual].copy()
             if not filtered_df.empty:
                 def highlight_row(row): return ['background-color: #fff8c4'] * len(row) if row['Contato'] else [''] * len(row)
