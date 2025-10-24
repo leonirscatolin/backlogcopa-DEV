@@ -336,7 +336,9 @@ try:
         scroll_target_id_on_load = 'detalhar-e-buscar-chamados'
 
     if scroll_target_id_on_load:
-        # Tempo de 800ms mantido
+        # ==========================================================
+        # CORREÇÃO 1: Tempo aumentado para 1200ms
+        # ==========================================================
         js_code = f"""
         <script>
             setTimeout(() => {{
@@ -351,11 +353,10 @@ try:
                     url.searchParams.delete('scroll_to');
                     window.history.replaceState({{}}, '', url);
                 }} catch (e) {{ console.error("Could not clear URL parameters:", e); }}
-            }}, 800); 
+            }}, 1200); 
         </script>
         """
         components.html(js_code, height=0)
-        # REMOVIDO st.query_params.clear() DAQUI
 
     df_atual = read_github_file(repo, "dados_atuais.csv")
     df_15dias = read_github_file(repo, "dados_15_dias.csv")
@@ -392,38 +393,10 @@ try:
              info_messages.append("- Os chamados marcados como fechados no dia já foram excluídos das contagens principais e dos grupos correspondentes.")
         st.info("\n".join(info_messages))
 
-        # Bloco "Análise e Foco do Dia" removido (comentado)
-        # if not df_aging.empty:
-        #     try:
-        #         group_counts = df_aging['Atribuir a um grupo'].value_counts()
-        #         top_group_name = group_counts.index[0]
-        #         top_group_count = group_counts.iloc[0]
-        #         total_tickets = len(df_aging)
-        #         top_group_percent = (top_group_count / total_tickets) * 100
-                
-        #         trend_text = ""
-        #         if not df_evolucao_agente.empty:
-        #             df_grupo_trend = df_evolucao_agente[df_evolucao_agente['Atribuir a um grupo'] == top_group_name]
-        #             df_grupo_trend = df_grupo_trend.groupby('Data')['Total Chamados'].sum().sort_index()
-                    
-        #             if len(df_grupo_trend) >= 2:
-        #                 primeiro_dia_total = df_grupo_trend.iloc[0]
-        #                 ultimo_dia_total = df_grupo_trend.iloc[-1]
-        #                 diferenca = ultimo_dia_total - primeiro_dia_total
-                        
-        #                 if diferenca < -1:
-        ...
-        #             else:
-        #                 trend_text = "Aguardando mais dados de evolução para esta fila."
-                
-        #         summary_lines = [
-        #             "**Análise e Foco do Dia:**",
-        ...
-        #         ]
-        #         st.info("\n".join(summary_lines))
-            
-        #     except Exception:
-        #         pass 
+        # ==========================================================
+        # CORREÇÃO 2: Bloco "Análise e Foco do Dia" REMOVIDO
+        # (Não está mais comentado, foi deletado para evitar o bug do Ellipsis)
+        # ==========================================================
         
         st.subheader("Análise de Antiguidade do Backlog Atual")
         texto_hora = f" (atualizado às {hora_atualizacao_str})" if hora_atualizacao_str else ""
@@ -461,14 +434,7 @@ try:
         st.dataframe(df_comparativo.set_index('Grupo Atribuído').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
         st.markdown("---")
         
-        # ==========================================================
-        # CORREÇÃO: Âncora invisível removida
-        # ==========================================================
-        # st.markdown("<a id='chamados-encerrados'></a>", unsafe_allow_html=True)
-        
-        # ==========================================================
-        # CORREÇÃO: ID retornado para o <h3>
-        # ==========================================================
+        # O ID está de volta no H3, como estava na versão que funcionou o alinhamento
         st.markdown(f"<h3 id='chamados-encerrados'>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
         
         if not df_encerrados_filtrado.empty:
