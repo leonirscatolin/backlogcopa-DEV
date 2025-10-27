@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-720 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza de NaN + Rodapé + Tab4 Resumo Ajustado)
+# VERSÃO v0.9.20-721 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza de NaN + Rodapé + Tab4 Resumo Ajustado Visual)
 
 import streamlit as st
 import pandas as pd
@@ -619,7 +619,7 @@ try:
         else: 
             st.info("Ainda não há dados históricos suficientes.")
             
-    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 com Resumo) ---
+    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 com Resumo Ajustado) ---
     with tab4:
         st.subheader("Resumo Semanal: Grupos com Maiores Variações")
         
@@ -662,7 +662,7 @@ try:
                     st.info(f"Nenhum grupo teve redução expressiva (maior que {limite_estabilidade}%) na semana.")
                 else:
                     for _, row in df_reducoes.head(5).iterrows():
-                        spacer1, metric_col, spacer2 = st.columns([1, 2, 1]) # Colunas para centralizar
+                        spacer1, metric_col, spacer2 = st.columns([1, 2, 1]) 
                         with metric_col:
                             delta_str = f"{row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
                             st.metric(
@@ -674,12 +674,13 @@ try:
                         st.divider()
 
             with col_piorias:
-                st.markdown("<h3 style='text-align: center;'>Grupos que Pioraram</h3>", unsafe_allow_html=True)
+                # Título em vermelho
+                st.markdown("<h3 style='text-align: center; color: red;'>Grupos que Pioraram</h3>", unsafe_allow_html=True) 
                 if df_aumentos.empty:
                     st.info(f"Nenhum grupo teve aumento expressivo (maior que {limite_estabilidade}%) na semana.")
                 else:
                     for _, row in df_aumentos.head(5).iterrows():
-                        spacer1, metric_col, spacer2 = st.columns([1, 2, 1]) # Colunas para centralizar
+                        spacer1, metric_col, spacer2 = st.columns([1, 2, 1])
                         with metric_col:
                             delta_str = f"{row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
                             st.metric(
@@ -688,7 +689,7 @@ try:
                                 delta=delta_str, 
                                 delta_color="normal" 
                             )
-                        st.divider()
+                        # Divider removido daqui para agrupar visualmente
             
             st.markdown("---")
             with st.expander("Ver tabela completa de tendência (Todos os Grupos)"):
@@ -736,6 +737,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-720 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-721 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
