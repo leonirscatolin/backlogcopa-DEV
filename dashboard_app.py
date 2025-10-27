@@ -449,9 +449,6 @@ try:
         st.markdown("---")
         st.markdown(f"<h3>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
         
-        # ==========================================================
-        # INÍCIO DA MODIFICAÇÃO (Mensagem de Chamados Encerrados)
-        # ==========================================================
         if df_fechados.empty:
             st.info("O arquivo de chamados encerrados ainda não foi carregado.")
         elif not df_encerrados_filtrado.empty:
@@ -459,9 +456,6 @@ try:
         else:
             # Caso o arquivo de fechados exista, mas os IDs não batam ou sejam todos RH
             st.info("O arquivo de chamados encerrados do dia ainda não foi carregado.")
-        # ==========================================================
-        # FIM DA MODIFICAÇÃO
-        # ==========================================================
 
         if not df_aging.empty:
             st.markdown("---")
@@ -574,7 +568,7 @@ try:
             st.warning("Nenhum dado para gerar o report visual.")
 
     # ==========================================================
-    # INÍCIO DA MODIFICAÇÃO (Avisos da Tab 3)
+    # INÍCIO DA MODIFICAÇÃO (Filtro de Fim de Semana na Tab 3)
     # ==========================================================
     with tab3:
         st.subheader("Evolução do Backlog")
@@ -585,42 +579,54 @@ try:
         
         if not df_evolucao_tab3.empty:
             
-            # Aviso 1: Para o gráfico de Total Geral
-            st.info("Esta visualização ainda está coletando dados históricos. Utilize as outras abas como referência principal por enquanto.")
+            # Assegurar que 'Data' é datetime
+            df_evolucao_tab3['Data'] = pd.to_datetime(df_evolucao_tab3['Data'])
+            # Filtrar para incluir apenas dias de semana (Seg=0 ... Sex=4)
+            df_evolucao_tab3 = df_evolucao_tab3[df_evolucao_tab3['Data'].dt.dayofweek < 5].copy()
             
-            df_total_diario = df_evolucao_tab3.groupby('Data')['Total Chamados'].sum().reset_index()
-            df_total_diario = df_total_diario.sort_values('Data')
-            fig_total_evolucao = px.area(
-                df_total_diario,
-                x='Data',
-                y='Total Chamados',
-                title='Evolução do Total Geral de Chamados Abertos',
-                markers=True,
-                labels={"Data": "Data", "Total Chamados": "Total Geral de Chamados"}
-            )
-            fig_total_evolucao.update_layout(height=400)
-            st.plotly_chart(fig_total_evolucao, use_container_width=True)
+            # Verificar se, após filtrar os fins de semana, ainda há dados
+            if not df_evolucao_tab3.empty:
             
-            st.markdown("---")
-            
-            # Aviso 2: Para o gráfico de Evolução por Grupo
-            st.info("Esta visualização já filtra os chamados fechados e permite filtrar grupos clicando 2x na legenda.")
+                # Aviso 1: Para o gráfico de Total Geral
+                st.info("Esta visualização ainda está coletando dados históricos. Utilize as outras abas como referência principal por enquanto.")
+                
+                df_total_diario = df_evolucao_tab3.groupby('Data')['Total Chamados'].sum().reset_index()
+                df_total_diario = df_total_diario.sort_values('Data')
+                fig_total_evolucao = px.area(
+                    df_total_diario,
+                    x='Data',
+                    y='Total Chamados',
+                    title='Evolução do Total Geral de Chamados Abertos (Apenas Dias de Semana)',
+                    markers=True,
+                    labels={"Data": "Data", "Total Chamados": "Total Geral de Chamados"}
+                )
+                fig_total_evolucao.update_layout(height=400)
+                st.plotly_chart(fig_total_evolucao, use_container_width=True)
+                
+                st.markdown("---")
+                
+                # Aviso 2: Para o gráfico de Evolução por Grupo
+                st.info("Esta visualização já filtra os chamados fechados e permite filtrar grupos clicando 2x na legenda.")
 
-            # Gráfico de linhas sem o multiselect
-            df_filtrado_display = df_evolucao_tab3.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
-            fig_evolucao_grupo = px.line(
-                df_filtrado_display.sort_values('Data'),
-                x='Data',
-                y='Total Chamados',
-                color='Grupo Atribuído',
-                title='Evolução por Grupo',
-                markers=True,
-                labels={ "Data": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" }
-            )
-            fig_evolucao_grupo.update_layout(height=600)
-            st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
+                # Gráfico de linhas sem o multiselect
+                df_filtrado_display = df_evolucao_tab3.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
+                fig_evolucao_grupo = px.line(
+                    df_filtrado_display.sort_values('Data'),
+                    x='Data',
+                    y='Total Chamados',
+                    color='Grupo Atribuído',
+                    title='Evolução por Grupo (Apenas Dias de Semana)',
+                    markers=True,
+                    labels={ "Data": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" }
+                )
+                fig_evolucao_grupo.update_layout(height=600)
+                st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
             
-        else: st.info("Ainda não há dados históricos suficientes.")
+            else:
+                 st.info("Ainda não há dados históricos suficientes (considerando apenas dias de semana).")
+                
+        else: 
+            st.info("Ainda não há dados históricos suficientes.")
     # ==========================================================
     # FIM DA MODIFICAÇÃO
     # ==========================================================
