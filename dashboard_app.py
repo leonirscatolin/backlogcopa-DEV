@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-727 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final Ajustado)
+# VERSÃO v0.9.20-727 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final Centered)
 
 import streamlit as st
 import pandas as pd
@@ -706,7 +706,11 @@ try:
 
                 # Coluna da Esquerda: Grupos com Redução
                 with col_reducoes:
-                    st.markdown("<h3 style='text-align: center;'>Grupos com Maiores Reduções</h3>", unsafe_allow_html=True)
+                    # Título Centralizado
+                    title_spacer1, title_col, title_spacer2 = st.columns([1, 2, 1])
+                    with title_col:
+                        st.markdown("<h3 style='text-align: center;'>Grupos com Maiores Reduções</h3>", unsafe_allow_html=True)
+                    
                     if df_reducoes.empty:
                          st.info("Nenhum grupo apresentou redução no backlog na última semana.")
                     else:
@@ -726,12 +730,15 @@ try:
 
                 # Coluna da Direita: Pareto dos Aumentos
                 with col_aumentos_pareto:
-                    # Título em Preto
-                    st.markdown("<h3 style='text-align: center;'>Grupos que Precisam de Atenção (Pareto)</h3>", unsafe_allow_html=True) 
+                    # Título Centralizado e Preto
+                    title_spacer1, title_col, title_spacer2 = st.columns([1, 2, 1])
+                    with title_col:
+                        st.markdown("<h3 style='text-align: center;'>Grupos que Precisam de Atenção (Pareto)</h3>", unsafe_allow_html=True) 
+                    
                     if df_aumentos.empty:
                         st.success("🎉 Nenhum grupo apresentou aumento no backlog na última semana!")
                     else:
-                        # Caption removida
+                        # Caption Removida
                         
                         aumento_total = df_aumentos['Variação Absoluta'].sum()
                         if aumento_total <= 0: 
@@ -767,6 +774,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-726 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-727 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
