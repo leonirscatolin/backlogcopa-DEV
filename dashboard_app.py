@@ -1,3 +1,5 @@
+# VERSÃO v0.9.20-716 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza de NaN)
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -67,6 +69,8 @@ def read_github_file(_repo, file_path):
             return pd.DataFrame()
         df = pd.read_csv(StringIO(content), delimiter=';', encoding='utf-8', dtype={'ID do ticket': str, 'ID do Ticket': str})
         df.columns = df.columns.str.strip()
+        # Limpeza de linhas completamente vazias que podem ter sido salvas
+        df.dropna(how='all', inplace=True) 
         return df
     except GithubException as e:
         if e.status == 404:
@@ -121,6 +125,12 @@ def process_uploaded_file(uploaded_file):
                 content = uploaded_file.getvalue().decode('latin1')
             df = pd.read_csv(StringIO(content), delimiter=';', dtype=dtype_spec)
         df.columns = df.columns.str.strip()
+        
+        # --- INÍCIO DA MODIFICAÇÃO ---
+        # Limpa linhas onde TODAS as colunas são NaN (linhas vazias do Excel/CSV)
+        df.dropna(how='all', inplace=True)
+        # --- FIM DA MODIFICAÇÃO ---
+
         output = StringIO()
         df.to_csv(output, index=False, sep=';', encoding='utf-8')
         return output.getvalue().encode('utf-8')
@@ -618,4 +628,4 @@ except Exception as e:
     st.exception(e)
 
 st.markdown("---")
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.20-715 | Este dashboard está em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.20-716 | Este dashboard está em desenvolvimento.</p>""", unsafe_allow_html=True)
