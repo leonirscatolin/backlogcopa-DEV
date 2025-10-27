@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-721 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza de NaN + Rodapé + Tab4 Resumo Ajustado Visual)
+# VERSÃO v0.9.20-722 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza de NaN + Rodapé + Tab4 Pareto Aumento)
 
 import streamlit as st
 import pandas as pd
@@ -619,9 +619,9 @@ try:
         else: 
             st.info("Ainda não há dados históricos suficientes.")
             
-    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 com Resumo Ajustado) ---
+    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 com Pareto) ---
     with tab4:
-        st.subheader("Resumo Semanal: Grupos com Maiores Variações")
+        st.subheader("Análise Semanal: Grupos com Maior Impacto no Aumento do Backlog")
         
         dias_referencia = 7
         df_evolucao_7d = carregar_dados_evolucao(repo, closed_ticket_ids_list=closed_ticket_ids, dias_para_analisar=dias_referencia)
@@ -649,57 +649,56 @@ try:
             df_tendencia['Variação (%)'] = (100 * (df_tendencia['Fim'] - df_tendencia['Início']) / df_tendencia['Início'])
             df_tendencia['Variação (%)'] = df_tendencia['Variação (%)'].replace([np.inf, -np.inf], np.nan) 
             
-            limite_estabilidade = 5.0 
-            
-            df_reducoes = df_tendencia[df_tendencia['Variação (%)'] < -limite_estabilidade].sort_values(by='Variação (%)', ascending=True)
-            df_aumentos = df_tendencia[df_tendencia['Variação (%)'] > limite_estabilidade].sort_values(by='Variação (%)', ascending=False)
+            # Filtrar apenas grupos que aumentaram
+            df_aumentos = df_tendencia[df_tendencia['Variação Absoluta'] > 0].copy()
 
-            col_melhorias, col_piorias = st.columns(2)
+            if df_aumentos.empty:
+                st.success("🎉 Nenhum grupo apresentou aumento no backlog na última semana!")
+            else:
+                st.markdown("<h3 style='text-align: center; color: red;'>Grupos que Precisam de Atenção (Princípio de Pareto)</h3>", unsafe_allow_html=True)
+                st.caption("Identificando os grupos responsáveis por aproximadamente 80% do aumento *total* do backlog na semana.")
+                
+                # Calcular o aumento total
+                aumento_total = df_aumentos['Variação Absoluta'].sum()
+                
+                # Ordenar por maior aumento absoluto
+                df_aumentos = df_aumentos.sort_values(by='Variação Absoluta', ascending=False)
+                
+                # Calcular contribuição cumulativa
+                df_aumentos['Cumulativo'] = df_aumentos['Variação Absoluta'].cumsum()
+                df_aumentos['% Contribuição Acumulada'] = 100 * df_aumentos['Cumulativo'] / aumento_total
+                
+                # Selecionar grupos até ~80%
+                limite_pareto = 80.0
+                df_pareto = df_aumentos[df_aumentos['% Contribuição Acumulada'] <= limite_pareto + 5] # Adiciona margem
+                # Garante que pelo menos o primeiro grupo seja exibido, mesmo que ele sozinho ultrapasse 80%
+                if df_pareto.empty and not df_aumentos.empty:
+                    df_pareto = df_aumentos.head(1)
+                
+                num_cols = min(len(df_pareto), 4) # Mostrar no máximo 4 colunas de métricas
+                cols = st.columns(num_cols)
+                
+                for i, (_, row) in enumerate(df_pareto.iterrows()):
+                    with cols[i % num_cols]:
+                        perc_contrib_total = (100 * row['Variação Absoluta'] / aumento_total) if aumento_total > 0 else 0
+                        delta_str = f"{row['Variação Absoluta']:+.0f} chamados (de {row['Início']:.0f})"
+                        st.metric(
+                            label=row['Grupo'],
+                            value=f"{row['Fim']:.0f} chamados",
+                            delta=delta_str,
+                            delta_color="normal",
+                            help=f"Este grupo foi responsável por {perc_contrib_total:.1f}% do aumento total do backlog."
+                        )
+                        st.markdown(f"**Variação:** {row['Variação (%)']:.1f}%" if not pd.isna(row['Variação (%)']) else "**Variação:** Novo")
+                        st.divider() # Adiciona separador entre métricas na mesma coluna
 
-            with col_melhorias:
-                st.markdown("<h3 style='text-align: center;'>Grupos que Melhoraram</h3>", unsafe_allow_html=True)
-                if df_reducoes.empty:
-                    st.info(f"Nenhum grupo teve redução expressiva (maior que {limite_estabilidade}%) na semana.")
-                else:
-                    for _, row in df_reducoes.head(5).iterrows():
-                        spacer1, metric_col, spacer2 = st.columns([1, 2, 1]) 
-                        with metric_col:
-                            delta_str = f"{row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
-                            st.metric(
-                                label=row['Grupo'], 
-                                value=f"{row['Variação (%)']:.1f}%", 
-                                delta=delta_str, 
-                                delta_color="inverse"
-                            )
-                        st.divider()
-
-            with col_piorias:
-                # Título em vermelho
-                st.markdown("<h3 style='text-align: center; color: red;'>Grupos que Pioraram</h3>", unsafe_allow_html=True) 
-                if df_aumentos.empty:
-                    st.info(f"Nenhum grupo teve aumento expressivo (maior que {limite_estabilidade}%) na semana.")
-                else:
-                    for _, row in df_aumentos.head(5).iterrows():
-                        spacer1, metric_col, spacer2 = st.columns([1, 2, 1])
-                        with metric_col:
-                            delta_str = f"{row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
-                            st.metric(
-                                label=row['Grupo'], 
-                                value=f"{row['Variação (%)']:.1f}%", 
-                                delta=delta_str, 
-                                delta_color="normal" 
-                            )
-                        # Divider removido daqui para agrupar visualmente
-            
             st.markdown("---")
             with st.expander("Ver tabela completa de tendência (Todos os Grupos)"):
+                limite_estabilidade = 5.0 
                 def get_tendencia_status(variacao):
-                    if pd.isna(variacao):
-                        return "Grupo Novo"
-                    if variacao < -limite_estabilidade:
-                        return "Redução" 
-                    if variacao > limite_estabilidade:
-                        return "Aumento" 
+                    if pd.isna(variacao): return "Grupo Novo"
+                    if variacao < -limite_estabilidade: return "Redução" 
+                    if variacao > limite_estabilidade: return "Aumento" 
                     return "Estável" 
 
                 df_tendencia['Tendência'] = df_tendencia['Variação (%)'].apply(get_tendencia_status)
@@ -707,13 +706,10 @@ try:
                 df_tendencia = df_tendencia[['Grupo', 'Início', 'Fim', 'Variação Absoluta', 'Variação (%)', 'Tendência']]
                 
                 def style_variacao(val):
-                    if pd.isna(val):
-                        return 'background-color: #f0f2f6'
+                    if pd.isna(val): return 'background-color: #f0f2f6'
                     color = ''
-                    if val > limite_estabilidade:
-                        color = '#ffcccc'
-                    elif val < -limite_estabilidade:
-                        color = '#ccffcc'
+                    if val > limite_estabilidade: color = '#ffcccc'
+                    elif val < -limite_estabilidade: color = '#ccffcc'
                     return f'background-color: {color}'
 
                 st.dataframe(
@@ -737,6 +733,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-721 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-722 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
