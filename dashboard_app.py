@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-723 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza de NaN + Rodapé + Tab4 Semana vs Semana)
+# VERSÃO v0.9.20-724 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza de NaN + Rodapé + Tab4 Semana vs Semana Flexível)
 
 import streamlit as st
 import pandas as pd
@@ -68,7 +68,6 @@ def read_github_file(_repo, file_path):
         content = content_file.decoded_content.decode("utf-8")
         if not content.strip():
             return pd.DataFrame()
-        # Adicionado `low_memory=False` para evitar warning de Dtype em arquivos grandes
         df = pd.read_csv(StringIO(content), delimiter=';', encoding='utf-8', dtype={'ID do ticket': str, 'ID do Ticket': str}, low_memory=False)
         df.columns = df.columns.str.strip()
         df.dropna(how='all', inplace=True) 
@@ -232,13 +231,11 @@ def sync_ticket_data():
 
 @st.cache_data(ttl=3600)
 def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7):
-    # Esta função agora é usada principalmente pela Tab3, a Tab4 busca os snapshots diretamente.
     try:
         all_files_content = _repo.get_contents("snapshots")
         all_files = [f.path for f in all_files_content]
         df_evolucao_list = []
         end_date = date.today()
-        # Ajusta para buscar um pouco mais para garantir que tenhamos dados suficientes para a janela
         start_date = end_date - timedelta(days=max(dias_para_analisar, 10)) 
         
         closed_ids_set = set(closed_ticket_ids_list)
@@ -254,7 +251,6 @@ def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7)
                 except ValueError: continue
                 except Exception: continue
         
-        # Ordena por data e pega os 'dias_para_analisar' mais recentes
         processed_dates.sort(key=lambda x: x[0], reverse=True)
         files_to_process = [f[1] for f in processed_dates[:dias_para_analisar]]
 
@@ -273,7 +269,7 @@ def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7)
                      contagem_diaria = df_snapshot_final.groupby('Atribuir a um grupo').size().reset_index(name='Total Chamados')
                      contagem_diaria['Data'] = pd.to_datetime(file_date)
                      df_evolucao_list.append(contagem_diaria)
-             except Exception: continue # Ignora erros em arquivos individuais
+             except Exception: continue 
 
         if not df_evolucao_list: return pd.DataFrame()
         
@@ -287,30 +283,40 @@ def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7)
         st.error(f"Erro ao carregar evolução: {e}")
         return pd.DataFrame()
 
-# --- INÍCIO DA MODIFICAÇÃO (Função Auxiliar para Tab 4) ---
+# --- INÍCIO DA MODIFICAÇÃO (Função Auxiliar para Tab 4 - Lógica Ajustada) ---
 @st.cache_data(ttl=300)
-def find_closest_snapshot(_repo, target_date):
-    """Encontra o snapshot mais próximo antes ou na target_date."""
+def find_closest_snapshot(_repo, current_report_date, target_date):
+    """Encontra o snapshot mais próximo da target_date, buscando nos últimos ~10 dias."""
     try:
         all_files_content = _repo.get_contents("snapshots")
         snapshots = []
+        # Define a janela de busca (ex: 10 dias antes da data atual do relatório)
+        search_start_date = current_report_date - timedelta(days=10) 
+        
         for file in all_files_content:
             match = re.search(r"backlog_(\d{4}-\d{2}-\d{2})\.csv", file.path)
             if match:
                 snapshot_date = datetime.strptime(match.group(1), "%Y-%m-%d").date()
-                if snapshot_date <= target_date:
+                # Considera snapshots na janela de busca, excluindo o dia atual
+                if search_start_date <= snapshot_date < current_report_date: 
                     snapshots.append((snapshot_date, file.path))
         
         if not snapshots:
-            return None, None # Nenhum snapshot encontrado antes ou na data
+            return None, None # Nenhum snapshot encontrado na janela
 
-        # Retorna a data mais recente (mais próxima) e o caminho
-        snapshots.sort(key=lambda x: x[0], reverse=True)
-        return snapshots[0] # (data, caminho)
+        # Calcula a diferença em dias para a data alvo (7 dias atrás)
+        diffs = [abs((snapshot[0] - target_date).days) for snapshot in snapshots]
+        
+        # Encontra o índice da menor diferença
+        min_index = diffs.index(min(diffs))
+        
+        return snapshots[min_index] # (data_mais_proxima, caminho)
+        
     except Exception as e:
         st.warning(f"Erro ao buscar snapshots: {e}")
         return None, None
 # --- FIM DA MODIFICAÇÃO ---
+
 
 st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
 
@@ -652,56 +658,61 @@ try:
         else: 
             st.info("Ainda não há dados históricos suficientes.")
             
-    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 com Pareto Semana vs Semana) ---
+    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 com Pareto Semana vs Semana Flexível) ---
     with tab4:
         st.subheader("Análise Semana vs Semana: Grupos com Maior Impacto no Aumento")
         
-        # Encontrar data de início (7 dias antes da data atual do relatório)
+        # Determinar a data atual do relatório e a data alvo (7 dias antes)
+        current_report_date = None
         try:
-            data_atual_date = datetime.strptime(data_atual_str, "%d/%m/%Y").date()
-            target_start_date = data_atual_date - timedelta(days=7)
+            current_report_date = datetime.strptime(data_atual_str, "%d/%m/%Y").date()
         except ValueError:
             st.error("Não foi possível determinar a data de referência atual para a comparação semanal.")
-            st.stop() # Interrompe a execução desta aba se a data for inválida
+            st.stop()
+            
+        target_start_date = current_report_date - timedelta(days=7)
 
-        actual_start_date, start_snapshot_path = find_closest_snapshot(repo, target_start_date)
+        # Encontrar o snapshot mais próximo
+        actual_start_date, start_snapshot_path = find_closest_snapshot(repo, current_report_date, target_start_date)
 
         if start_snapshot_path is None:
-            st.warning(f"Não foi encontrado um snapshot de dados próximo a {target_start_date.strftime('%d/%m/%Y')} para realizar a comparação semanal.")
+            st.warning(f"Não foi encontrado um snapshot de dados próximo a {target_start_date.strftime('%d/%m/%Y')} (7 dias antes) para realizar a comparação semanal.")
         else:
             df_inicio_raw = read_github_file(repo, start_snapshot_path)
             
             if df_inicio_raw.empty or 'Atribuir a um grupo' not in df_inicio_raw.columns:
                  st.warning(f"O snapshot encontrado para {actual_start_date.strftime('%d/%m/%Y')} está vazio ou inválido.")
             else:
-                # Filtrar RH e agregar dados de início
                 df_inicio_filtrado = df_inicio_raw[~df_inicio_raw['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
-                # Remover fechados da semana anterior também (se existirem no snapshot)
-                df_inicio_filtrado = df_inicio_filtrado[~df_inicio_filtrado['ID do ticket'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().isin(closed_ticket_ids)]
+                # Tenta identificar a coluna ID no snapshot de início
+                id_col_inicio = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_inicio_filtrado.columns), None)
+                if id_col_inicio:
+                    # Remove fechados (do dia atual) que já poderiam estar no snapshot da semana anterior
+                    ids_inicio_limpos = df_inicio_filtrado[id_col_inicio].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+                    df_inicio_filtrado = df_inicio_filtrado[~ids_inicio_limpos.isin(closed_ticket_ids)]
+                
                 df_inicio_data = df_inicio_filtrado.groupby('Atribuir a um grupo').size().reset_index(name='Início').rename(
                     columns={'Atribuir a um grupo': 'Grupo'}
                 )
 
-                # Dados de Fim (já filtrados e sem fechados do dia)
                 df_fim_data = df_atual_filtrado.groupby('Atribuir a um grupo').size().reset_index(name='Fim').rename(
                     columns={'Atribuir a um grupo': 'Grupo'}
                 )
                 
-                st.info(f"Comparando backlog de **{actual_start_date.strftime('%d/%m/%Y')} (Início)** com **{data_atual_str} (Fim)**.")
+                # Mensagem informativa ajustada
+                st.info(f"Comparando backlog de **{actual_start_date.strftime('%d/%m/%Y')} (Início - data mais próxima de 7 dias atrás)** com **{data_atual_str} (Fim)**.")
                 st.markdown("---")
 
                 df_tendencia = pd.merge(df_inicio_data, df_fim_data, on='Grupo', how='outer').fillna(0)
-                df_tendencia[['Início', 'Fim']] = df_tendencia[['Início', 'Fim']].astype(int) # Garantir que são inteiros
+                df_tendencia[['Início', 'Fim']] = df_tendencia[['Início', 'Fim']].astype(int)
                 df_tendencia['Variação Absoluta'] = df_tendencia['Fim'] - df_tendencia['Início']
                 
-                # Calcular Variação % (lidando com divisão por zero no Início)
                 df_tendencia['Variação (%)'] = np.where(
                     df_tendencia['Início'] > 0, 
                     100 * (df_tendencia['Fim'] - df_tendencia['Início']) / df_tendencia['Início'], 
-                    np.nan # Retorna NaN se Início era 0 para evitar divisão por zero ou inf
+                    np.nan 
                 )
                 
-                # Filtrar apenas grupos que aumentaram
                 df_aumentos = df_tendencia[df_tendencia['Variação Absoluta'] > 0].copy()
 
                 if df_aumentos.empty:
@@ -711,7 +722,7 @@ try:
                     st.caption("Identificando os grupos responsáveis por aproximadamente 80% do aumento *total* do backlog na semana.")
                     
                     aumento_total = df_aumentos['Variação Absoluta'].sum()
-                    if aumento_total <= 0: # Caso raro onde só houve grupos novos com 0 -> 1 por exemplo
+                    if aumento_total <= 0: 
                          st.info("Aumento total do backlog foi zero ou negativo. Não há grupos críticos por este critério.")
                     else:
                         df_aumentos = df_aumentos.sort_values(by='Variação Absoluta', ascending=False)
@@ -729,25 +740,27 @@ try:
                         for i, (_, row) in enumerate(df_pareto.iterrows()):
                             with cols[i % num_cols]:
                                 perc_contrib_total = (100 * row['Variação Absoluta'] / aumento_total)
-                                # Texto do delta ajustado
                                 delta_help = f"Responsável por {perc_contrib_total:.1f}% do aumento total. Variação: {row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
                                 st.metric(
                                     label=row['Grupo'],
-                                    value=f"{row['Fim']:.0f} chamados", # Valor principal é o final
-                                    delta=f"{row['Variação (%)']:+.1f}%" if not pd.isna(row['Variação (%)']) else "Grupo Novo", # Delta é a %
+                                    value=f"{row['Fim']:.0f} chamados", 
+                                    delta=f"{row['Variação (%)']:+.1f}%" if not pd.isna(row['Variação (%)']) else "Grupo Novo", 
                                     delta_color="normal",
                                     help=delta_help
                                 )
-                                st.divider() 
+                                # Divider removido para visualização mais agrupada
+                                if i < len(df_pareto) - 1 and (i + 1) % num_cols == 0: # Adiciona espaço abaixo se não for a última linha da coluna
+                                     st.markdown("<br>", unsafe_allow_html=True)
+
 
                 st.markdown("---")
-                # Exibir grupos que reduziram (opcional, pode ser útil)
                 df_reducoes = df_tendencia[df_tendencia['Variação Absoluta'] < 0].sort_values(by='Variação Absoluta', ascending=True)
                 if not df_reducoes.empty:
                     with st.expander("Ver grupos que tiveram Redução no Backlog"):
+                        st.markdown("<h4 style='text-align: center;'>Grupos com Maiores Reduções</h4>", unsafe_allow_html=True)
                         num_cols_red = min(len(df_reducoes), 4)
                         cols_red = st.columns(num_cols_red)
-                        for i, (_, row) in enumerate(df_reducoes.head(num_cols_red * 2).iterrows()): # Mostra mais alguns
+                        for i, (_, row) in enumerate(df_reducoes.head(num_cols_red * 2).iterrows()): 
                              with cols_red[i % num_cols_red]:
                                 delta_help_red = f"Variação: {row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
                                 st.metric(
@@ -759,7 +772,6 @@ try:
                                 )
                                 st.divider()
                 
-                # Tabela completa continua no expander
                 with st.expander("Ver tabela completa de tendência (Todos os Grupos)"):
                     limite_estabilidade_tab = 5.0 
                     def get_tendencia_status_tab(variacao):
@@ -769,7 +781,7 @@ try:
                         return "Estável" 
 
                     df_tendencia['Tendência'] = df_tendencia['Variação (%)'].apply(get_tendencia_status_tab)
-                    df_tendencia_display = df_tendencia.sort_values(by='Variação Absoluta', ascending=False) # Ordenar por variação absoluta para a tabela
+                    df_tendencia_display = df_tendencia.sort_values(by='Variação Absoluta', ascending=False)
                     df_tendencia_display = df_tendencia_display[['Grupo', 'Início', 'Fim', 'Variação Absoluta', 'Variação (%)', 'Tendência']]
                     
                     def style_variacao_tab(val):
@@ -800,6 +812,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-723 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-724 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
