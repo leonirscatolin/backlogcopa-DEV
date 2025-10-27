@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-719 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza de NaN + Rodapé + Tab4 Resumo)
+# VERSÃO v0.9.20-720 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza de NaN + Rodapé + Tab4 Resumo Ajustado)
 
 import streamlit as st
 import pandas as pd
@@ -619,7 +619,7 @@ try:
         else: 
             st.info("Ainda não há dados históricos suficientes.")
             
-    # --- INÍCIO DA MODIFICAÇÃO (Nova Tab 4) ---
+    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 com Resumo) ---
     with tab4:
         st.subheader("Resumo Semanal: Grupos com Maiores Variações")
         
@@ -649,7 +649,7 @@ try:
             df_tendencia['Variação (%)'] = (100 * (df_tendencia['Fim'] - df_tendencia['Início']) / df_tendencia['Início'])
             df_tendencia['Variação (%)'] = df_tendencia['Variação (%)'].replace([np.inf, -np.inf], np.nan) 
             
-            limite_estabilidade = 5.0 # Define 5% como o limite para ser "expressivo"
+            limite_estabilidade = 5.0 
             
             df_reducoes = df_tendencia[df_tendencia['Variação (%)'] < -limite_estabilidade].sort_values(by='Variação (%)', ascending=True)
             df_aumentos = df_tendencia[df_tendencia['Variação (%)'] > limite_estabilidade].sort_values(by='Variação (%)', ascending=False)
@@ -657,35 +657,37 @@ try:
             col_melhorias, col_piorias = st.columns(2)
 
             with col_melhorias:
-                st.markdown("### 📉 Grupos que Melhoraram")
+                st.markdown("<h3 style='text-align: center;'>Grupos que Melhoraram</h3>", unsafe_allow_html=True)
                 if df_reducoes.empty:
                     st.info(f"Nenhum grupo teve redução expressiva (maior que {limite_estabilidade}%) na semana.")
                 else:
                     for _, row in df_reducoes.head(5).iterrows():
-                        delta_str = f"{row['Variação (%)']:.1f}% ({row['Variação Absoluta']:+.0f})"
-                        st.metric(
-                            label=row['Grupo'], 
-                            value=f"{row['Fim']:.0f} chamados", 
-                            delta=delta_str, 
-                            delta_color="inverse"
-                        )
-                        st.caption(f"Valor inicial: {row['Início']:.0f} chamados")
+                        spacer1, metric_col, spacer2 = st.columns([1, 2, 1]) # Colunas para centralizar
+                        with metric_col:
+                            delta_str = f"{row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
+                            st.metric(
+                                label=row['Grupo'], 
+                                value=f"{row['Variação (%)']:.1f}%", 
+                                delta=delta_str, 
+                                delta_color="inverse"
+                            )
                         st.divider()
 
             with col_piorias:
-                st.markdown("### 📈 Grupos que Pioraram")
+                st.markdown("<h3 style='text-align: center;'>Grupos que Pioraram</h3>", unsafe_allow_html=True)
                 if df_aumentos.empty:
                     st.info(f"Nenhum grupo teve aumento expressivo (maior que {limite_estabilidade}%) na semana.")
                 else:
                     for _, row in df_aumentos.head(5).iterrows():
-                        delta_str = f"{row['Variação (%)']:.1f}% ({row['Variação Absoluta']:+.0f})"
-                        st.metric(
-                            label=row['Grupo'], 
-                            value=f"{row['Fim']:.0f} chamados", 
-                            delta=delta_str, 
-                            delta_color="normal"
-                        )
-                        st.caption(f"Valor inicial: {row['Início']:.0f} chamados")
+                        spacer1, metric_col, spacer2 = st.columns([1, 2, 1]) # Colunas para centralizar
+                        with metric_col:
+                            delta_str = f"{row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
+                            st.metric(
+                                label=row['Grupo'], 
+                                value=f"{row['Variação (%)']:.1f}%", 
+                                delta=delta_str, 
+                                delta_color="normal" 
+                            )
                         st.divider()
             
             st.markdown("---")
@@ -694,10 +696,10 @@ try:
                     if pd.isna(variacao):
                         return "Grupo Novo"
                     if variacao < -limite_estabilidade:
-                        return "Redução 📉"
+                        return "Redução" 
                     if variacao > limite_estabilidade:
-                        return "Aumento 📈"
-                    return "Estável ➖"
+                        return "Aumento" 
+                    return "Estável" 
 
                 df_tendencia['Tendência'] = df_tendencia['Variação (%)'].apply(get_tendencia_status)
                 df_tendencia = df_tendencia.sort_values(by='Variação (%)', ascending=True, na_position='last')
@@ -734,6 +736,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-719 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-720 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
