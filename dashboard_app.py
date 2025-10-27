@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-724 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza de NaN + Rodapé + Tab4 Semana vs Semana Flexível)
+# VERSÃO v0.9.20-726 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final)
 
 import streamlit as st
 import pandas as pd
@@ -283,39 +283,30 @@ def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7)
         st.error(f"Erro ao carregar evolução: {e}")
         return pd.DataFrame()
 
-# --- INÍCIO DA MODIFICAÇÃO (Função Auxiliar para Tab 4 - Lógica Ajustada) ---
 @st.cache_data(ttl=300)
 def find_closest_snapshot(_repo, current_report_date, target_date):
-    """Encontra o snapshot mais próximo da target_date, buscando nos últimos ~10 dias."""
     try:
         all_files_content = _repo.get_contents("snapshots")
         snapshots = []
-        # Define a janela de busca (ex: 10 dias antes da data atual do relatório)
         search_start_date = current_report_date - timedelta(days=10) 
         
         for file in all_files_content:
             match = re.search(r"backlog_(\d{4}-\d{2}-\d{2})\.csv", file.path)
             if match:
                 snapshot_date = datetime.strptime(match.group(1), "%Y-%m-%d").date()
-                # Considera snapshots na janela de busca, excluindo o dia atual
                 if search_start_date <= snapshot_date < current_report_date: 
                     snapshots.append((snapshot_date, file.path))
         
         if not snapshots:
-            return None, None # Nenhum snapshot encontrado na janela
+            return None, None 
 
-        # Calcula a diferença em dias para a data alvo (7 dias atrás)
         diffs = [abs((snapshot[0] - target_date).days) for snapshot in snapshots]
-        
-        # Encontra o índice da menor diferença
         min_index = diffs.index(min(diffs))
-        
-        return snapshots[min_index] # (data_mais_proxima, caminho)
+        return snapshots[min_index] 
         
     except Exception as e:
         st.warning(f"Erro ao buscar snapshots: {e}")
         return None, None
-# --- FIM DA MODIFICAÇÃO ---
 
 
 st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
@@ -658,11 +649,10 @@ try:
         else: 
             st.info("Ainda não há dados históricos suficientes.")
             
-    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 com Pareto Semana vs Semana Flexível) ---
+    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 Layout Final) ---
     with tab4:
-        st.subheader("Análise Semana vs Semana: Grupos com Maior Impacto no Aumento")
+        st.subheader("Análise Semana vs Semana: Variação do Backlog por Grupo")
         
-        # Determinar a data atual do relatório e a data alvo (7 dias antes)
         current_report_date = None
         try:
             current_report_date = datetime.strptime(data_atual_str, "%d/%m/%Y").date()
@@ -672,7 +662,6 @@ try:
             
         target_start_date = current_report_date - timedelta(days=7)
 
-        # Encontrar o snapshot mais próximo
         actual_start_date, start_snapshot_path = find_closest_snapshot(repo, current_report_date, target_start_date)
 
         if start_snapshot_path is None:
@@ -684,10 +673,8 @@ try:
                  st.warning(f"O snapshot encontrado para {actual_start_date.strftime('%d/%m/%Y')} está vazio ou inválido.")
             else:
                 df_inicio_filtrado = df_inicio_raw[~df_inicio_raw['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
-                # Tenta identificar a coluna ID no snapshot de início
                 id_col_inicio = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_inicio_filtrado.columns), None)
                 if id_col_inicio:
-                    # Remove fechados (do dia atual) que já poderiam estar no snapshot da semana anterior
                     ids_inicio_limpos = df_inicio_filtrado[id_col_inicio].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
                     df_inicio_filtrado = df_inicio_filtrado[~ids_inicio_limpos.isin(closed_ticket_ids)]
                 
@@ -699,7 +686,6 @@ try:
                     columns={'Atribuir a um grupo': 'Grupo'}
                 )
                 
-                # Mensagem informativa ajustada
                 st.info(f"Comparando backlog de **{actual_start_date.strftime('%d/%m/%Y')} (Início - data mais próxima de 7 dias atrás)** com **{data_atual_str} (Fim)**.")
                 st.markdown("---")
 
@@ -714,96 +700,64 @@ try:
                 )
                 
                 df_aumentos = df_tendencia[df_tendencia['Variação Absoluta'] > 0].copy()
+                df_reducoes = df_tendencia[df_tendencia['Variação Absoluta'] < 0].copy()
 
-                if df_aumentos.empty:
-                    st.success("🎉 Nenhum grupo apresentou aumento no backlog na última semana!")
-                else:
-                    st.markdown("<h3 style='text-align: center; color: red;'>Grupos que Precisam de Atenção (Princípio de Pareto)</h3>", unsafe_allow_html=True)
-                    st.caption("Identificando os grupos responsáveis por aproximadamente 80% do aumento *total* do backlog na semana.")
-                    
-                    aumento_total = df_aumentos['Variação Absoluta'].sum()
-                    if aumento_total <= 0: 
-                         st.info("Aumento total do backlog foi zero ou negativo. Não há grupos críticos por este critério.")
+                col_reducoes, col_aumentos_pareto = st.columns(2)
+
+                # Coluna da Esquerda: Grupos com Redução
+                with col_reducoes:
+                    st.markdown("<h3 style='text-align: center;'>Grupos com Maiores Reduções</h3>", unsafe_allow_html=True)
+                    if df_reducoes.empty:
+                         st.info("Nenhum grupo apresentou redução no backlog na última semana.")
                     else:
-                        df_aumentos = df_aumentos.sort_values(by='Variação Absoluta', ascending=False)
-                        df_aumentos['Cumulativo'] = df_aumentos['Variação Absoluta'].cumsum()
-                        df_aumentos['% Contribuição Acumulada'] = 100 * df_aumentos['Cumulativo'] / aumento_total
-                        
-                        limite_pareto = 80.0
-                        df_pareto = df_aumentos[df_aumentos['% Contribuição Acumulada'] <= limite_pareto + 5] 
-                        if df_pareto.empty and not df_aumentos.empty:
-                            df_pareto = df_aumentos.head(1)
-                        
-                        num_cols = min(len(df_pareto), 4) 
-                        cols = st.columns(num_cols)
-                        
-                        for i, (_, row) in enumerate(df_pareto.iterrows()):
-                            with cols[i % num_cols]:
-                                perc_contrib_total = (100 * row['Variação Absoluta'] / aumento_total)
-                                delta_help = f"Responsável por {perc_contrib_total:.1f}% do aumento total. Variação: {row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
-                                st.metric(
-                                    label=row['Grupo'],
-                                    value=f"{row['Fim']:.0f} chamados", 
-                                    delta=f"{row['Variação (%)']:+.1f}%" if not pd.isna(row['Variação (%)']) else "Grupo Novo", 
-                                    delta_color="normal",
-                                    help=delta_help
-                                )
-                                # Divider removido para visualização mais agrupada
-                                if i < len(df_pareto) - 1 and (i + 1) % num_cols == 0: # Adiciona espaço abaixo se não for a última linha da coluna
-                                     st.markdown("<br>", unsafe_allow_html=True)
-
-
-                st.markdown("---")
-                df_reducoes = df_tendencia[df_tendencia['Variação Absoluta'] < 0].sort_values(by='Variação Absoluta', ascending=True)
-                if not df_reducoes.empty:
-                    with st.expander("Ver grupos que tiveram Redução no Backlog"):
-                        st.markdown("<h4 style='text-align: center;'>Grupos com Maiores Reduções</h4>", unsafe_allow_html=True)
-                        num_cols_red = min(len(df_reducoes), 4)
-                        cols_red = st.columns(num_cols_red)
-                        for i, (_, row) in enumerate(df_reducoes.head(num_cols_red * 2).iterrows()): 
-                             with cols_red[i % num_cols_red]:
+                        df_reducoes = df_reducoes.sort_values(by='Variação Absoluta', ascending=True) # Ordena pela maior redução absoluta
+                        for _, row in df_reducoes.head(5).iterrows(): # Mostra os top 5
+                            spacer1, metric_col, spacer2 = st.columns([1, 2, 1]) 
+                            with metric_col:
                                 delta_help_red = f"Variação: {row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
                                 st.metric(
                                     label=row['Grupo'],
                                     value=f"{row['Fim']:.0f} chamados",
                                     delta=f"{row['Variação (%)']:+.1f}%",
-                                    delta_color="inverse",
+                                    delta_color="inverse", # Verde para redução
                                     help=delta_help_red
                                 )
-                                st.divider()
-                
-                with st.expander("Ver tabela completa de tendência (Todos os Grupos)"):
-                    limite_estabilidade_tab = 5.0 
-                    def get_tendencia_status_tab(variacao):
-                        if pd.isna(variacao): return "Grupo Novo"
-                        if variacao < -limite_estabilidade_tab: return "Redução" 
-                        if variacao > limite_estabilidade_tab: return "Aumento" 
-                        return "Estável" 
+                            st.divider()
 
-                    df_tendencia['Tendência'] = df_tendencia['Variação (%)'].apply(get_tendencia_status_tab)
-                    df_tendencia_display = df_tendencia.sort_values(by='Variação Absoluta', ascending=False)
-                    df_tendencia_display = df_tendencia_display[['Grupo', 'Início', 'Fim', 'Variação Absoluta', 'Variação (%)', 'Tendência']]
-                    
-                    def style_variacao_tab(val):
-                        if pd.isna(val): return 'background-color: #f0f2f6'
-                        color = ''
-                        if val > limite_estabilidade_tab: color = '#ffcccc'
-                        elif val < -limite_estabilidade_tab: color = '#ccffcc'
-                        return f'background-color: {color}'
-
-                    st.dataframe(
-                        df_tendencia_display.style.applymap(
-                            style_variacao_tab, 
-                            subset=['Variação (%)']
-                        ).format({
-                            'Variação (%)': '{:+.1f}%', 
-                            'Início': '{:.0f}', 
-                            'Fim': '{:.0f}', 
-                            'Variação Absoluta': '{:+.0f}'
-                        }),
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                # Coluna da Direita: Pareto dos Aumentos
+                with col_aumentos_pareto:
+                    st.markdown("<h3 style='text-align: center; color: red;'>Grupos que Precisam de Atenção (Pareto)</h3>", unsafe_allow_html=True)
+                    if df_aumentos.empty:
+                        st.success("🎉 Nenhum grupo apresentou aumento no backlog na última semana!")
+                    else:
+                        st.caption("Grupos responsáveis por ~80% do aumento *total* do backlog.")
+                        
+                        aumento_total = df_aumentos['Variação Absoluta'].sum()
+                        if aumento_total <= 0: 
+                             st.info("Aumento total do backlog foi zero ou negativo.")
+                        else:
+                            df_aumentos = df_aumentos.sort_values(by='Variação Absoluta', ascending=False)
+                            df_aumentos['Cumulativo'] = df_aumentos['Variação Absoluta'].cumsum()
+                            df_aumentos['% Contribuição Acumulada'] = 100 * df_aumentos['Cumulativo'] / aumento_total
+                            
+                            limite_pareto = 80.0
+                            df_pareto = df_aumentos[df_aumentos['% Contribuição Acumulada'] <= limite_pareto + 5] 
+                            if df_pareto.empty and not df_aumentos.empty:
+                                df_pareto = df_aumentos.head(1)
+                            
+                            for _, row in df_pareto.iterrows():
+                                spacer1, metric_col, spacer2 = st.columns([1, 2, 1])
+                                with metric_col:
+                                    perc_contrib_total = (100 * row['Variação Absoluta'] / aumento_total)
+                                    delta_help = f"Responsável por {perc_contrib_total:.1f}% do aumento total. Variação: {row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
+                                    st.metric(
+                                        label=row['Grupo'],
+                                        value=f"{row['Fim']:.0f} chamados", 
+                                        delta=f"{row['Variação (%)']:+.1f}%" if not pd.isna(row['Variação (%)']) else "Grupo Novo", 
+                                        delta_color="inverse", # <-- ALTERADO PARA VERMELHO
+                                        help=delta_help
+                                    )
+                                st.divider() 
     # --- FIM DA MODIFICAÇÃO ---
 
 except Exception as e:
@@ -812,6 +766,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-724 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-726 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
