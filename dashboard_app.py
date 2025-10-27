@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-729 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final + Read Robust)
+# VERSÃO v0.9.20-728 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final Título Ajustado + Indent Fix)
 
 import streamlit as st
 import pandas as pd
@@ -15,6 +15,7 @@ from urllib.parse import quote
 import json
 import colorsys
 import re # Importado para parsear datas dos nomes de arquivo
+import csv # Importado para sniffer
 
 st.set_page_config(
     layout="wide",
@@ -61,16 +62,13 @@ def update_github_file(_repo, file_path, file_content, commit_message):
         else:
             st.sidebar.error(f"Falha ao salvar '{file_path}': {e}")
 
-# --- FUNÇÃO ATUALIZADA ---
 @st.cache_data(ttl=300)
 def read_github_file(_repo, file_path):
     try:
         content_file = _repo.get_contents(file_path)
         content_bytes = content_file.decoded_content
 
-        # Se o arquivo no GitHub estiver literalmente vazio (0 bytes), retorna DataFrame vazio.
         if not content_bytes:
-            # st.sidebar.warning(f"Arquivo '{file_path}' encontrado no GitHub, mas está vazio.") # Descomente se quiser o aviso
             return pd.DataFrame()
 
         content = None
@@ -89,7 +87,6 @@ def read_github_file(_repo, file_path):
                  return pd.DataFrame()
 
         if content is None or not content.strip():
-            # Arquivo decodificado mas vazio
             return pd.DataFrame()
 
         try:
@@ -119,7 +116,6 @@ def read_github_file(_repo, file_path):
     except Exception as e:
         st.error(f"Erro inesperado ao ler o arquivo '{file_path}': {e}")
         return pd.DataFrame()
-# --- FIM DA FUNÇÃO ATUALIZADA ---
 
 @st.cache_data(ttl=300)
 def read_github_text_file(_repo, file_path):
@@ -161,22 +157,19 @@ def process_uploaded_file(uploaded_file):
         else:
             try:
                 content_bytes = uploaded_file.getvalue()
-                # Tenta detectar encoding antes de ler com pandas
                 try:
                     content_str = content_bytes.decode('utf-8')
-                    detected_encoding = 'utf-8'
                 except UnicodeDecodeError:
                     content_str = content_bytes.decode('latin-1')
-                    detected_encoding = 'latin-1'
-                 # Usa o delimitador ; por padrão, mas avisa se detectar ,
+                
                 sniffer = csv.Sniffer()
                 try:
-                    dialect = sniffer.sniff(content_str[:1024]) # Lê os primeiros 1024 bytes para detectar
+                    dialect = sniffer.sniff(content_str[:1024]) 
                     delimiter = dialect.delimiter
                     if delimiter != ';':
                         st.sidebar.warning(f"Detectado delimitador '{delimiter}' no arquivo CSV. Usando '{delimiter}'.")
                 except csv.Error:
-                    delimiter = ';' # Mantém ; se a detecção falhar
+                    delimiter = ';' 
                 
                 df = pd.read_csv(StringIO(content_str), delimiter=delimiter, dtype=dtype_spec, low_memory=False, on_bad_lines='warn')
 
@@ -188,7 +181,6 @@ def process_uploaded_file(uploaded_file):
         df.dropna(how='all', inplace=True)
 
         output = StringIO()
-        # Salva sempre como UTF-8 com ; para padronizar
         df.to_csv(output, index=False, sep=';', encoding='utf-8')
         return output.getvalue().encode('utf-8')
     except Exception as e:
@@ -224,9 +216,10 @@ def analisar_aging(_df_atual):
     df[date_col_name] = pd.to_datetime(df[date_col_name], errors='coerce')
     linhas_invalidas = df[df[date_col_name].isna()]
     if not linhas_invalidas.empty:
-        # Mostra apenas as primeiras 5 linhas inválidas para não poluir
+        id_col = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in linhas_invalidas.columns), None)
+        cols_to_show = [id_col, date_col_name, 'Atribuir a um grupo'] if id_col else [date_col_name, 'Atribuir a um grupo']
         with st.expander(f"⚠️ Atenção: {len(linhas_invalidas)} chamados foram descartados por data inválida ou vazia."):
-            st.dataframe(linhas_invalidas[['ID do ticket', date_col_name, 'Atribuir a um grupo']].head())
+            st.dataframe(linhas_invalidas[cols_to_show].head())
     df.dropna(subset=[date_col_name], inplace=True)
     hoje = pd.to_datetime('today').normalize()
     data_criacao_normalizada = df[date_col_name].dt.normalize()
@@ -256,10 +249,9 @@ def sync_ticket_data():
     observation_changed = False
     for row_index, changes in edited_rows.items():
         try:
-            # Tenta pegar o ID, tratando possível erro se o dataframe foi reordenado/filtrado
             ticket_id_obj = st.session_state.last_filtered_df.iloc[row_index]['ID do ticket']
             ticket_id = str(ticket_id_obj) if pd.notna(ticket_id_obj) else None
-            if not ticket_id: continue # Pula se não conseguiu ID
+            if not ticket_id: continue 
 
             if 'Contato' in changes:
                 current_contact_status = ticket_id in st.session_state.contacted_tickets
@@ -270,7 +262,7 @@ def sync_ticket_data():
                     contact_changed = True
             if 'Observações' in changes:
                 current_observation = st.session_state.observations.get(ticket_id, '')
-                new_observation = changes['Observações'] if pd.notna(changes['Observações']) else '' # Trata NaN
+                new_observation = changes['Observações'] if pd.notna(changes['Observações']) else '' 
                 if current_observation != new_observation:
                     st.session_state.observations[ticket_id] = new_observation
                     observation_changed = True
@@ -290,7 +282,6 @@ def sync_ticket_data():
             commit_msg = f"Atualizando contatos em {now_str}"
             update_github_file(st.session_state.repo, "contacted_tickets.json", json_content.encode('utf-8'), commit_msg)
         if observation_changed:
-             # Remove entradas vazias antes de salvar
             observations_to_save = {k: v for k, v in st.session_state.observations.items() if v}
             json_content = json.dumps(observations_to_save, indent=4, ensure_ascii=False)
             commit_msg = f"Atualizando observações em {now_str}"
@@ -307,9 +298,9 @@ def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7)
         all_files = [f.path for f in all_files_content]
         df_evolucao_list = []
         end_date = date.today()
-        start_date = end_date - timedelta(days=max(dias_para_analisar, 10)) # Busca um pouco mais
+        start_date = end_date - timedelta(days=max(dias_para_analisar, 10)) 
         
-        closed_ids_set = set(str(id_val) for id_val in closed_ticket_ids_list) # Garante que são strings
+        closed_ids_set = set(str(id_val) for id_val in closed_ticket_ids_list) 
         
         processed_dates = []
         for file_name in all_files:
@@ -323,7 +314,6 @@ def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7)
                 except Exception: continue
         
         processed_dates.sort(key=lambda x: x[0], reverse=True)
-        # Pega os N dias únicos mais recentes, não apenas N arquivos
         unique_dates = sorted(list(set(d[0] for d in processed_dates)), reverse=True)[:dias_para_analisar]
         files_to_process = [f[1] for f in processed_dates if f[0] in unique_dates]
 
@@ -334,11 +324,10 @@ def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7)
                  file_date = datetime.strptime(date_str, "%Y-%m-%d").date()
                  df_snapshot = read_github_file(_repo, file_name)
                  if not df_snapshot.empty and 'Atribuir a um grupo' in df_snapshot.columns:
-                     df_snapshot_filtrado_rh = df_snapshot[~df_snapshot['Atribuir a um grupo'].str.contains('RH', case=False, na=False)].copy() # Adiciona copy
+                     df_snapshot_filtrado_rh = df_snapshot[~df_snapshot['Atribuir a um grupo'].str.contains('RH', case=False, na=False)].copy() 
                      id_col_snapshot = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_snapshot_filtrado_rh.columns), None)
                      df_snapshot_final = df_snapshot_filtrado_rh 
                      if id_col_snapshot and closed_ids_set:
-                         # Garante que a coluna ID é string antes de comparar
                          df_snapshot_filtrado_rh[id_col_snapshot] = df_snapshot_filtrado_rh[id_col_snapshot].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
                          df_snapshot_final = df_snapshot_filtrado_rh[~df_snapshot_filtrado_rh[id_col_snapshot].isin(closed_ids_set)]
                      
@@ -352,7 +341,6 @@ def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7)
         if not df_evolucao_list: return pd.DataFrame()
         
         df_consolidado = pd.concat(df_evolucao_list, ignore_index=True)
-         # Agrupa novamente para garantir uma contagem única por dia/grupo se houver múltiplos uploads no mesmo dia
         df_consolidado = df_consolidado.groupby(['Data', 'Atribuir a um grupo'])['Total Chamados'].first().reset_index()
         return df_consolidado.sort_values(by=['Data', 'Atribuir a um grupo'])
         
@@ -364,37 +352,41 @@ def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7)
         st.error(f"Erro ao carregar evolução: {e}")
         return pd.DataFrame()
 
-
+# --- Função find_closest_snapshot com indentação corrigida ---
 @st.cache_data(ttl=300)
 def find_closest_snapshot(_repo, current_report_date, target_date):
+    """Encontra o snapshot mais próximo da target_date, buscando nos últimos ~10 dias."""
     try:
         all_files_content = _repo.get_contents("snapshots")
         snapshots = []
-        search_start_date = current_report_date - timedelta(days=10) 
-        
+        search_start_date = current_report_date - timedelta(days=10)
+
         for file in all_files_content:
             match = re.search(r"backlog_(\d{4}-\d{2}-\d{2})\.csv", file.path)
             if match:
                 snapshot_date = datetime.strptime(match.group(1), "%Y-%m-%d").date()
-                if search_start_date <= snapshot_date < current_report_date: 
+                if search_start_date <= snapshot_date < current_report_date:
                     snapshots.append((snapshot_date, file.path))
-        
+
         if not snapshots:
-            return None, None 
+            return None, None
 
         diffs = [abs((snapshot[0] - target_date).days) for snapshot in snapshots]
         min_index = diffs.index(min(diffs))
-        return snapshots[min_index] 
-        
+        return snapshots[min_index]
+
     except GithubException as e:
-         if e.status == 404: # Se a pasta snapshots não existir
-              return None, None
-         st.warning(f"Erro ao buscar snapshots no GitHub: {e}")
-         return None, None
+        # Correção da indentação aqui
+        if e.status == 404: # Se a pasta snapshots não existir
+            return None, None
+        st.warning(f"Erro ao buscar snapshots no GitHub: {e}")
+        return None, None
     except Exception as e:
         st.warning(f"Erro inesperado ao buscar snapshots: {e}")
         return None, None
+# --- Fim da correção ---
 
+st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
 
 # ... (Restante do código das tabs 1, 2, 3 permanece igual) ...
 
@@ -421,11 +413,10 @@ with tab4:
         if df_inicio_raw.empty or 'Atribuir a um grupo' not in df_inicio_raw.columns:
              st.warning(f"O snapshot encontrado para {actual_start_date.strftime('%d/%m/%Y')} está vazio ou inválido.")
         else:
-            df_inicio_filtrado = df_inicio_raw[~df_inicio_raw['Atribuir a um grupo'].str.contains('RH', case=False, na=False)].copy() # Adiciona .copy()
+            df_inicio_filtrado = df_inicio_raw[~df_inicio_raw['Atribuir a um grupo'].str.contains('RH', case=False, na=False)].copy() 
             id_col_inicio = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_inicio_filtrado.columns), None)
             if id_col_inicio:
                 df_inicio_filtrado[id_col_inicio] = df_inicio_filtrado[id_col_inicio].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-                # Remove fechados (do dia atual) que já poderiam estar no snapshot da semana anterior
                 df_inicio_filtrado = df_inicio_filtrado[~df_inicio_filtrado[id_col_inicio].isin(closed_ticket_ids)]
                 
             df_inicio_data = df_inicio_filtrado.groupby('Atribuir a um grupo').size().reset_index(name='Início').rename(
@@ -481,13 +472,11 @@ with tab4:
             with col_aumentos_pareto:
                 title_spacer1, title_col, title_spacer2 = st.columns([1, 2, 1])
                 with title_col:
-                    st.markdown("<h3 style='text-align: center;'>Grupos que Precisam de Atenção</h3>", unsafe_allow_html=True) # Removido (Pareto)
+                    st.markdown("<h3 style='text-align: center;'>Grupos que Precisam de Atenção</h3>", unsafe_allow_html=True) 
                     
                 if df_aumentos.empty:
                     st.success("🎉 Nenhum grupo apresentou aumento no backlog na última semana!")
                 else:
-                    # Caption Removida
-                        
                     aumento_total = df_aumentos['Variação Absoluta'].sum()
                     if aumento_total <= 0: 
                          st.info("Aumento total do backlog foi zero ou negativo.")
@@ -514,8 +503,6 @@ with tab4:
                                     help=delta_help
                                 )
                             st.divider() 
-
-# --- FIM DA MODIFICAÇÃO (Tab 4) ---
 
 except Exception as e:
     st.error(f"Ocorreu um erro ao carregar os dados: {e}")
