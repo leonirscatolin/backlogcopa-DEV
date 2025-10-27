@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-727 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final Centered)
+# VERSÃO v0.9.20-728 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final Título Ajustado)
 
 import streamlit as st
 import pandas as pd
@@ -733,7 +733,8 @@ try:
                     # Título Centralizado e Preto
                     title_spacer1, title_col, title_spacer2 = st.columns([1, 2, 1])
                     with title_col:
-                        st.markdown("<h3 style='text-align: center;'>Grupos que Precisam de Atenção (Pareto)</h3>", unsafe_allow_html=True) 
+                        # Removido (Pareto) do título
+                        st.markdown("<h3 style='text-align: center;'>Grupos que Precisam de Atenção</h3>", unsafe_allow_html=True) 
                     
                     if df_aumentos.empty:
                         st.success("🎉 Nenhum grupo apresentou aumento no backlog na última semana!")
