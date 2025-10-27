@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-728 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final Título Ajustado)
+# VERSÃO v0.9.20-729 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final + Read Robust)
 
 import streamlit as st
 import pandas as pd
@@ -61,25 +61,60 @@ def update_github_file(_repo, file_path, file_content, commit_message):
         else:
             st.sidebar.error(f"Falha ao salvar '{file_path}': {e}")
 
+# --- INÍCIO DA MODIFICAÇÃO (Função read_github_file mais robusta) ---
 @st.cache_data(ttl=300)
 def read_github_file(_repo, file_path):
     try:
         content_file = _repo.get_contents(file_path)
-        content = content_file.decoded_content.decode("utf-8")
+        content_bytes = content_file.decoded_content
+        
+        # Tenta decodificar com utf-8 primeiro
+        try:
+            content = content_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            # Se utf-8 falhar, tenta latin-1 como fallback
+            try:
+                content = content_bytes.decode("latin-1")
+                # Avisa que usou o fallback, pode ser útil para debug
+                if file_path == "dados_fechados.csv": 
+                    st.sidebar.warning(f"Arquivo '{file_path}' lido com encoding 'latin-1'. Verifique se o arquivo foi salvo corretamente.")
+            except Exception as decode_err:
+                 # Se ambos falharem, mostra erro e retorna vazio
+                 st.error(f"Não foi possível decodificar o arquivo '{file_path}' com utf-8 ou latin-1: {decode_err}")
+                 return pd.DataFrame()
+
+        # Se o conteúdo estiver vazio após decodificar, retorna vazio
         if not content.strip():
             return pd.DataFrame()
-        df = pd.read_csv(StringIO(content), delimiter=';', encoding='utf-8', dtype={'ID do ticket': str, 'ID do Ticket': str}, low_memory=False)
+            
+        # Tenta ler o CSV, adicionando tratamento para linhas malformadas
+        try:
+             # Mesmo que decodificado como latin-1, passamos utf-8 aqui pois pd.read_csv lida bem internamente
+             df = pd.read_csv(StringIO(content), delimiter=';', encoding='utf-8', 
+                              dtype={'ID do ticket': str, 'ID do Ticket': str}, low_memory=False,
+                              on_bad_lines='warn') # Avisa sobre linhas ruins em vez de parar
+        except pd.errors.ParserError as parse_err:
+             st.error(f"Erro ao parsear o CSV '{file_path}': {parse_err}. Verifique o delimitador (;) e a estrutura do arquivo.")
+             return pd.DataFrame()
+        except Exception as read_err:
+             st.error(f"Erro inesperado ao ler o conteúdo CSV de '{file_path}': {read_err}")
+             return pd.DataFrame()
+             
         df.columns = df.columns.str.strip()
         df.dropna(how='all', inplace=True) 
         return df
+        
     except GithubException as e:
         if e.status == 404:
-            return pd.DataFrame()
-        st.error(f"Erro ao ler arquivo do GitHub '{file_path}': {e}")
+            # Arquivo não encontrado não é um erro fatal aqui
+            return pd.DataFrame() 
+        st.error(f"Erro ao acessar o arquivo do GitHub '{file_path}': {e}")
         return pd.DataFrame()
     except Exception as e:
-        st.error(f"Erro ao ler arquivo do GitHub '{file_path}': {e}")
+        # Pega outros erros inesperados
+        st.error(f"Erro inesperado ao ler o arquivo '{file_path}': {e}")
         return pd.DataFrame()
+# --- FIM DA MODIFICAÇÃO ---
 
 @st.cache_data(ttl=300)
 def read_github_text_file(_repo, file_path):
@@ -649,7 +684,7 @@ try:
         else: 
             st.info("Ainda não há dados históricos suficientes.")
             
-    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 Layout Final Ajustado) ---
+    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 Layout Final Título Ajustado) ---
     with tab4:
         st.subheader("Análise Semana vs Semana: Variação do Backlog por Grupo")
         
@@ -706,7 +741,6 @@ try:
 
                 # Coluna da Esquerda: Grupos com Redução
                 with col_reducoes:
-                    # Título Centralizado
                     title_spacer1, title_col, title_spacer2 = st.columns([1, 2, 1])
                     with title_col:
                         st.markdown("<h3 style='text-align: center;'>Grupos com Maiores Reduções</h3>", unsafe_allow_html=True)
@@ -730,10 +764,9 @@ try:
 
                 # Coluna da Direita: Pareto dos Aumentos
                 with col_aumentos_pareto:
-                    # Título Centralizado e Preto
                     title_spacer1, title_col, title_spacer2 = st.columns([1, 2, 1])
                     with title_col:
-                        # Removido (Pareto) do título
+                        # Removido (Pareto) e cor vermelha do título
                         st.markdown("<h3 style='text-align: center;'>Grupos que Precisam de Atenção</h3>", unsafe_allow_html=True) 
                     
                     if df_aumentos.empty:
