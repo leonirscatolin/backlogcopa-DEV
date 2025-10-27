@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-728 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final Título Ajustado + Indent Fix)
+# VERSÃO v0.9.20-729 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final + Read Robust + Indent Fix 2)
 
 import streamlit as st
 import pandas as pd
@@ -164,14 +164,22 @@ def process_uploaded_file(uploaded_file):
                 
                 sniffer = csv.Sniffer()
                 try:
-                    dialect = sniffer.sniff(content_str[:1024]) 
+                    # Check first few lines for delimiter
+                    sample = content_str[:2048] # Increase sample size
+                    dialect = sniffer.sniff(sample) 
                     delimiter = dialect.delimiter
                     if delimiter != ';':
                         st.sidebar.warning(f"Detectado delimitador '{delimiter}' no arquivo CSV. Usando '{delimiter}'.")
                 except csv.Error:
-                    delimiter = ';' 
-                
-                df = pd.read_csv(StringIO(content_str), delimiter=delimiter, dtype=dtype_spec, low_memory=False, on_bad_lines='warn')
+                     # If sniffer fails, assume semicolon but allow pandas to try auto-detect
+                    delimiter = None 
+                    st.sidebar.warning("Não foi possível detectar o delimitador CSV automaticamente. Tentando ';' e auto-detecção.")
+
+
+                # Let pandas try to determine delimiter if sniffer failed or wasn't ';'
+                df = pd.read_csv(StringIO(content_str), delimiter=delimiter or ';', # Use detected or fallback to ';'
+                                 sep=None if delimiter is None else ';', # sep=None allows pandas auto-detect if delimiter is None
+                                 dtype=dtype_spec, low_memory=False, on_bad_lines='warn')
 
             except Exception as read_err:
                  st.sidebar.error(f"Erro ao ler o arquivo CSV {uploaded_file.name}: {read_err}")
@@ -212,16 +220,33 @@ def analisar_aging(_df_atual):
     if 'Data de criação' in df.columns: date_col_name = 'Data de criação'
     elif 'Data de Criacao' in df.columns: date_col_name = 'Data de Criacao'
     if not date_col_name:
-        return pd.DataFrame()
+        st.error("Coluna de data de criação ('Data de criação' ou 'Data de Criacao') não encontrada no arquivo atual.")
+        return pd.DataFrame() # Retorna DF vazio se a coluna crucial falta
+        
     df[date_col_name] = pd.to_datetime(df[date_col_name], errors='coerce')
     linhas_invalidas = df[df[date_col_name].isna()]
+    
+    # Verifica se há alguma linha válida antes de remover as inválidas
+    if df[date_col_name].notna().sum() == 0 and not df.empty:
+         st.error(f"Nenhuma data válida encontrada na coluna '{date_col_name}' do arquivo atual. A análise de aging não pode prosseguir.")
+         return pd.DataFrame() # Retorna DF vazio se não houver datas válidas
+
     if not linhas_invalidas.empty:
-        id_col = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in linhas_invalidas.columns), None)
-        cols_to_show = [id_col, date_col_name, 'Atribuir a um grupo'] if id_col else [date_col_name, 'Atribuir a um grupo']
-        with st.expander(f"⚠️ Atenção: {len(linhas_invalidas)} chamados foram descartados por data inválida ou vazia."):
+        id_col = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in linhas_invalidas.columns), 'ID não encontrado')
+        cols_to_show = [id_col, date_col_name, 'Atribuir a um grupo'] if id_col != 'ID não encontrado' else [date_col_name, 'Atribuir a um grupo']
+        # Mostra apenas colunas que realmente existem
+        cols_to_show = [col for col in cols_to_show if col in linhas_invalidas.columns] 
+        with st.expander(f"⚠️ Atenção: {len(linhas_invalidas)} chamados foram descartados por data inválida ou vazia na coluna '{date_col_name}'."):
             st.dataframe(linhas_invalidas[cols_to_show].head())
+            
     df.dropna(subset=[date_col_name], inplace=True)
+    if df.empty: # Checa se o DF ficou vazio após dropar NaT
+         st.warning("Após remover chamados com datas inválidas, nenhum chamado restou para análise.")
+         return pd.DataFrame()
+         
     hoje = pd.to_datetime('today').normalize()
+    # Garante que a coluna de data é datetime antes de usar .dt
+    df[date_col_name] = pd.to_datetime(df[date_col_name]) 
     data_criacao_normalizada = df[date_col_name].dt.normalize()
     dias_calculados = (hoje - data_criacao_normalizada).dt.days
     df['Dias em Aberto'] = (dias_calculados - 1).clip(lower=0)
@@ -376,7 +401,6 @@ def find_closest_snapshot(_repo, current_report_date, target_date):
         return snapshots[min_index]
 
     except GithubException as e:
-        # Correção da indentação aqui
         if e.status == 404: # Se a pasta snapshots não existir
             return None, None
         st.warning(f"Erro ao buscar snapshots no GitHub: {e}")
@@ -388,128 +412,270 @@ def find_closest_snapshot(_repo, current_report_date, target_date):
 
 st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
 
-# ... (Restante do código das tabs 1, 2, 3 permanece igual) ...
+logo_copa_b64 = get_image_as_base64("logo_sidebar.png")
+logo_belago_b64 = get_image_as_base64("logo_belago.png")
+if logo_copa_b64 and logo_belago_b64:
+    st.markdown(f"""<div style="display: flex; justify-content: space-between; align-items: center;"><img src="data:image/png;base64,{logo_copa_b64}" width="150"><h1 style='text-align: center; margin: 0;'>Backlog Copa Energia + Belago</h1><img src="data:image/png;base64,{logo_belago_b64}" width="150"></div>""", unsafe_allow_html=True)
+else:
+    st.error("Arquivos de logo não encontrados.")
 
-# --- Código da Tab 4 com os ajustes finais ---
-with tab4:
-    st.subheader("Análise Semana vs Semana: Variação do Backlog por Grupo")
-        
-    current_report_date = None
-    try:
-        current_report_date = datetime.strptime(data_atual_str, "%d/%m/%Y").date()
-    except ValueError:
-        st.error("Não foi possível determinar a data de referência atual para a comparação semanal.")
-        st.stop()
-            
-    target_start_date = current_report_date - timedelta(days=7)
+repo = get_github_repo()
+st.session_state.repo = repo
 
-    actual_start_date, start_snapshot_path = find_closest_snapshot(repo, current_report_date, target_start_date)
+st.sidebar.header("Área do Administrador")
+password = st.sidebar.text_input("Senha para atualizar dados:", type="password")
+is_admin = password == st.secrets.get("ADMIN_PASSWORD", "")
 
-    if start_snapshot_path is None:
-        st.warning(f"Não foi encontrado um snapshot de dados próximo a {target_start_date.strftime('%d/%m/%Y')} (7 dias antes) para realizar a comparação semanal.")
-    else:
-        df_inicio_raw = read_github_file(repo, start_snapshot_path)
-            
-        if df_inicio_raw.empty or 'Atribuir a um grupo' not in df_inicio_raw.columns:
-             st.warning(f"O snapshot encontrado para {actual_start_date.strftime('%d/%m/%Y')} está vazio ou inválido.")
+if is_admin:
+    st.sidebar.success("Acesso de administrador liberado.")
+    st.sidebar.subheader("Atualização Completa")
+    uploaded_file_atual = st.sidebar.file_uploader("1. Backlog ATUAL", type=["csv", "xlsx"], key="uploader_atual")
+    uploaded_file_15dias = st.sidebar.file_uploader("2. Backlog de 15 DIAS ATRÁS", type=["csv", "xlsx"], key="uploader_15dias")
+    if st.sidebar.button("Salvar Novos Dados no Site"):
+        if uploaded_file_atual and uploaded_file_15dias:
+            with st.spinner("Processando e salvando atualização completa..."):
+                now_sao_paulo = datetime.now(ZoneInfo('America/Sao_Paulo'))
+                commit_msg = f"Dados atualizados em {now_sao_paulo.strftime('%d/%m/%Y %H:%M')}"
+                content_atual = process_uploaded_file(uploaded_file_atual)
+                content_15dias = process_uploaded_file(uploaded_file_15dias)
+                if content_atual is not None and content_15dias is not None:
+                    update_github_file(repo, "dados_atuais.csv", content_atual, commit_msg)
+                    update_github_file(repo, "dados_15_dias.csv", content_15dias, commit_msg)
+                    today_str = now_sao_paulo.strftime('%Y-%m-%d')
+                    snapshot_path = f"snapshots/backlog_{today_str}.csv"
+                    update_github_file(repo, snapshot_path, content_atual, f"Snapshot de {today_str}")
+                    data_do_upload = now_sao_paulo.date()
+                    data_arquivo_15dias = data_do_upload - timedelta(days=15)
+                    hora_atualizacao = now_sao_paulo.strftime('%H:%M')
+                    datas_referencia_content = (f"data_atual:{data_do_upload.strftime('%d/%m/%Y')}\n"
+                                                f"data_15dias:{data_arquivo_15dias.strftime('%d/%m/%Y')}\n"
+                                                f"hora_atualizacao:{hora_atualizacao}")
+                    update_github_file(repo, "datas_referencia.txt", datas_referencia_content.encode('utf-8'), commit_msg)
+                    st.cache_data.clear()
+                    st.cache_resource.clear()
+                    st.sidebar.success("Arquivos salvos! Forçando recarregamento...")
+                    st.rerun()
         else:
-            df_inicio_filtrado = df_inicio_raw[~df_inicio_raw['Atribuir a um grupo'].str.contains('RH', case=False, na=False)].copy() 
-            id_col_inicio = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_inicio_filtrado.columns), None)
-            if id_col_inicio:
-                df_inicio_filtrado[id_col_inicio] = df_inicio_filtrado[id_col_inicio].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-                df_inicio_filtrado = df_inicio_filtrado[~df_inicio_filtrado[id_col_inicio].isin(closed_ticket_ids)]
-                
-            df_inicio_data = df_inicio_filtrado.groupby('Atribuir a um grupo').size().reset_index(name='Início').rename(
-                columns={'Atribuir a um grupo': 'Grupo'}
-            )
+            st.sidebar.warning("Para a atualização completa, carregue os arquivos ATUAL e de 15 DIAS.")
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Atualização Rápida")
+    uploaded_file_fechados = st.sidebar.file_uploader("Apenas Chamados FECHADOS no dia", type=["csv", "xlsx"], key="uploader_fechados")
+    if st.sidebar.button("Salvar Apenas Chamados Fechados"):
+        if uploaded_file_fechados:
+            with st.spinner("Salvando arquivo de chamados fechados..."):
+                now_sao_paulo = datetime.now(ZoneInfo('America/Sao_Paulo'))
+                commit_msg = f"Atualizando chamados fechados em {now_sao_paulo.strftime('%d/%m/%Y %H:%M')}"
+                content_fechados = process_uploaded_file(uploaded_file_fechados)
+                if content_fechados is not None:
+                    update_github_file(repo, "dados_fechados.csv", content_fechados, commit_msg)
+                    st.cache_data.clear()
+                    st.cache_resource.clear()
+                    st.sidebar.success("Arquivo de fechados salvo! Recarregando...")
+                    st.rerun()
+        else:
+            st.sidebar.warning("Por favor, carregue o arquivo de chamados fechados para salvar.")
+elif password:
+    st.sidebar.error("Senha incorreta.")
 
-            df_fim_data = df_atual_filtrado.groupby('Atribuir a um grupo').size().reset_index(name='Fim').rename(
-                columns={'Atribuir a um grupo': 'Grupo'}
-            )
-                
-            st.info(f"Comparando backlog de **{actual_start_date.strftime('%d/%m/%Y')} (Início - data mais próxima de 7 dias atrás)** com **{data_atual_str} (Fim)**.")
-            st.markdown("---")
+try:
+    if 'contacted_tickets' not in st.session_state:
+        try:
+            file_content = repo.get_contents("contacted_tickets.json").decoded_content.decode("utf-8")
+            st.session_state.contacted_tickets = set(json.loads(file_content))
+        except GithubException as e:
+            if e.status == 404: st.session_state.contacted_tickets = set()
+            else: st.error(f"Erro ao carregar o estado dos tickets: {e}"); st.session_state.contacted_tickets = set()
 
-            df_tendencia = pd.merge(df_inicio_data, df_fim_data, on='Grupo', how='outer').fillna(0)
-            df_tendencia[['Início', 'Fim']] = df_tendencia[['Início', 'Fim']].astype(int)
-            df_tendencia['Variação Absoluta'] = df_tendencia['Fim'] - df_tendencia['Início']
-                
-            df_tendencia['Variação (%)'] = np.where(
-                df_tendencia['Início'] > 0, 
-                100 * (df_tendencia['Fim'] - df_tendencia['Início']) / df_tendencia['Início'], 
-                np.nan 
-            )
-                
-            df_aumentos = df_tendencia[df_tendencia['Variação Absoluta'] > 0].copy()
-            df_reducoes = df_tendencia[df_tendencia['Variação Absoluta'] < 0].copy()
+    if 'observations' not in st.session_state:
+        st.session_state.observations = read_github_json_dict(repo, "ticket_observations.json")
+    
+    needs_scroll = "scroll" in st.query_params
+    if "faixa" in st.query_params:
+        faixa_from_url = st.query_params.get("faixa")
+        ordem_faixas_validas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
+        if faixa_from_url in ordem_faixas_validas:
+                st.session_state.faixa_selecionada = faixa_from_url
+    if "scroll" in st.query_params or "faixa" in st.query_params:
+        st.query_params.clear()
+    
+    df_atual = read_github_file(repo, "dados_atuais.csv")
+    df_15dias = read_github_file(repo, "dados_15_dias.csv")
+    df_fechados = read_github_file(repo, "dados_fechados.csv")
+    datas_referencia = read_github_text_file(repo, "datas_referencia.txt")
+    data_atual_str = datas_referencia.get('data_atual', 'N/A')
+    data_15dias_str = datas_referencia.get('data_15dias', 'N/A')
+    hora_atualizacao_str = datas_referencia.get('hora_atualizacao', '')
+    if df_atual.empty: # Não precisa mais checar df_15dias aqui
+        st.warning("Arquivo 'dados_atuais.csv' não encontrado ou vazio. Carregue os dados na área do administrador.")
+        st.stop()
+    if data_atual_str == 'N/A':
+         st.warning("Arquivo 'datas_referencia.txt' não encontrado ou inválido.")
+         # Tenta usar a data de hoje como fallback, mas avisa
+         data_atual_date = date.today()
+         data_atual_str = data_atual_date.strftime("%d/%m/%Y")
+         st.info(f"Usando data atual ({data_atual_str}) como referência para análise semanal.")
+    else:
+         try:
+              data_atual_date = datetime.strptime(data_atual_str, "%d/%m/%Y").date()
+         except ValueError:
+              st.error(f"Data atual '{data_atual_str}' em 'datas_referencia.txt' é inválida.")
+              data_atual_date = date.today() # Fallback
+              data_atual_str = data_atual_date.strftime("%d/%m/%Y")
+              st.info(f"Usando data atual ({data_atual_str}) como referência para análise semanal.")
 
-            col_reducoes, col_aumentos_pareto = st.columns(2)
 
-            # Coluna da Esquerda: Grupos com Redução
-            with col_reducoes:
-                title_spacer1, title_col, title_spacer2 = st.columns([1, 2, 1])
-                with title_col:
-                    st.markdown("<h3 style='text-align: center;'>Grupos com Maiores Reduções</h3>", unsafe_allow_html=True)
+    if 'ID do ticket' in df_atual.columns:
+        df_atual['ID do ticket'] = df_atual['ID do ticket'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+    else:
+        st.error("Coluna 'ID do ticket' não encontrada no arquivo atual. Verifique o cabeçalho.")
+        st.stop() # ID do ticket é crucial
+
+    
+    closed_ticket_ids = []
+    if not df_fechados.empty:
+        id_col_name_fechados = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_fechados.columns), None)
+        if id_col_name_fechados:
+            # Garante que a coluna de ID seja string antes de processar
+            df_fechados[id_col_name_fechados] = df_fechados[id_col_name_fechados].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+            closed_ticket_ids = df_fechados[id_col_name_fechados].dropna().unique().tolist() # Converte para lista
+
+    # Verifica se a coluna 'Atribuir a um grupo' existe
+    if 'Atribuir a um grupo' not in df_atual.columns:
+         st.error("Coluna 'Atribuir a um grupo' não encontrada no arquivo atual. Verifique o cabeçalho.")
+         st.stop() # Coluna de grupo é crucial
+
+    df_encerrados = df_atual[df_atual['ID do ticket'].isin(closed_ticket_ids)]
+    df_abertos = df_atual[~df_atual['ID do ticket'].isin(closed_ticket_ids)]
+    df_atual_filtrado = df_abertos[~df_abertos['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
+    
+    # Carrega df_15dias somente se existir para a Tab1
+    if not df_15dias.empty and 'Atribuir a um grupo' in df_15dias.columns:
+        df_15dias_filtrado = df_15dias[~df_15dias['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
+    else:
+        df_15dias_filtrado = pd.DataFrame() # Cria um DF vazio se não puder carregar/filtrar o de 15 dias
+
+    df_aging = analisar_aging(df_atual_filtrado.copy()) # Passa cópia para não modificar o original
+    
+    df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal", "Análise de Tendência"])
+    
+    # ... (Código das tabs 1, 2, 3 permanece o mesmo) ...
+
+    # --- Código da Tab 4 com os ajustes finais ---
+    with tab4:
+        st.subheader("Análise Semana vs Semana: Variação do Backlog por Grupo")
+            
+        target_start_date = data_atual_date - timedelta(days=7)
+
+        actual_start_date, start_snapshot_path = find_closest_snapshot(repo, data_atual_date, target_start_date)
+
+        if start_snapshot_path is None:
+            st.warning(f"Não foi encontrado um snapshot de dados próximo a {target_start_date.strftime('%d/%m/%Y')} (7 dias antes) para realizar a comparação semanal.")
+        else:
+            df_inicio_raw = read_github_file(repo, start_snapshot_path)
+            
+            if df_inicio_raw.empty or 'Atribuir a um grupo' not in df_inicio_raw.columns:
+                 st.warning(f"O snapshot encontrado para {actual_start_date.strftime('%d/%m/%Y')} está vazio ou inválido.")
+            else:
+                df_inicio_filtrado = df_inicio_raw[~df_inicio_raw['Atribuir a um grupo'].str.contains('RH', case=False, na=False)].copy() 
+                id_col_inicio = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_inicio_filtrado.columns), None)
+                if id_col_inicio:
+                    # Garante IDs como string antes de filtrar
+                    df_inicio_filtrado[id_col_inicio] = df_inicio_filtrado[id_col_inicio].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+                    df_inicio_filtrado = df_inicio_filtrado[~df_inicio_filtrado[id_col_inicio].isin(closed_ticket_ids)]
+                
+                df_inicio_data = df_inicio_filtrado.groupby('Atribuir a um grupo').size().reset_index(name='Início').rename(
+                    columns={'Atribuir a um grupo': 'Grupo'}
+                )
+
+                df_fim_data = df_atual_filtrado.groupby('Atribuir a um grupo').size().reset_index(name='Fim').rename(
+                    columns={'Atribuir a um grupo': 'Grupo'}
+                )
+                
+                st.info(f"Comparando backlog de **{actual_start_date.strftime('%d/%m/%Y')} (Início - data mais próxima de 7 dias atrás)** com **{data_atual_str} (Fim)**.")
+                st.markdown("---")
+
+                df_tendencia = pd.merge(df_inicio_data, df_fim_data, on='Grupo', how='outer').fillna(0)
+                df_tendencia[['Início', 'Fim']] = df_tendencia[['Início', 'Fim']].astype(int)
+                df_tendencia['Variação Absoluta'] = df_tendencia['Fim'] - df_tendencia['Início']
+                
+                df_tendencia['Variação (%)'] = np.where(
+                    df_tendencia['Início'] > 0, 
+                    100 * (df_tendencia['Fim'] - df_tendencia['Início']) / df_tendencia['Início'], 
+                    np.nan 
+                )
+                
+                df_aumentos = df_tendencia[df_tendencia['Variação Absoluta'] > 0].copy()
+                df_reducoes = df_tendencia[df_tendencia['Variação Absoluta'] < 0].copy()
+
+                col_reducoes, col_aumentos_pareto = st.columns(2)
+
+                # Coluna da Esquerda: Grupos com Redução
+                with col_reducoes:
+                    title_spacer1, title_col, title_spacer2 = st.columns([1, 2, 1])
+                    with title_col:
+                        st.markdown("<h3 style='text-align: center;'>Grupos com Maiores Reduções</h3>", unsafe_allow_html=True)
                     
-                if df_reducoes.empty:
-                     st.info("Nenhum grupo apresentou redução no backlog na última semana.")
-                else:
-                    df_reducoes = df_reducoes.sort_values(by='Variação Absoluta', ascending=True) 
-                    for _, row in df_reducoes.head(5).iterrows(): 
-                        spacer1, metric_col, spacer2 = st.columns([1, 2, 1]) 
-                        with metric_col:
-                            delta_help_red = f"Variação: {row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
-                            st.metric(
-                                label=row['Grupo'],
-                                value=f"{row['Fim']:.0f} chamados",
-                                delta=f"{row['Variação (%)']:+.1f}%",
-                                delta_color="inverse", # Verde para redução
-                                help=delta_help_red
-                            )
-                        st.divider()
-
-            # Coluna da Direita: Pareto dos Aumentos
-            with col_aumentos_pareto:
-                title_spacer1, title_col, title_spacer2 = st.columns([1, 2, 1])
-                with title_col:
-                    st.markdown("<h3 style='text-align: center;'>Grupos que Precisam de Atenção</h3>", unsafe_allow_html=True) 
-                    
-                if df_aumentos.empty:
-                    st.success("🎉 Nenhum grupo apresentou aumento no backlog na última semana!")
-                else:
-                    aumento_total = df_aumentos['Variação Absoluta'].sum()
-                    if aumento_total <= 0: 
-                         st.info("Aumento total do backlog foi zero ou negativo.")
+                    if df_reducoes.empty:
+                         st.info("Nenhum grupo apresentou redução no backlog na última semana.")
                     else:
-                        df_aumentos = df_aumentos.sort_values(by='Variação Absoluta', ascending=False)
-                        df_aumentos['Cumulativo'] = df_aumentos['Variação Absoluta'].cumsum()
-                        df_aumentos['% Contribuição Acumulada'] = 100 * df_aumentos['Cumulativo'] / aumento_total
-                            
-                        limite_pareto = 80.0
-                        df_pareto = df_aumentos[df_aumentos['% Contribuição Acumulada'] <= limite_pareto + 5] 
-                        if df_pareto.empty and not df_aumentos.empty:
-                            df_pareto = df_aumentos.head(1)
-                            
-                        for _, row in df_pareto.iterrows():
-                            spacer1, metric_col, spacer2 = st.columns([1, 2, 1])
+                        df_reducoes = df_reducoes.sort_values(by='Variação Absoluta', ascending=True) 
+                        for _, row in df_reducoes.head(5).iterrows(): 
+                            spacer1, metric_col, spacer2 = st.columns([1, 2, 1]) 
                             with metric_col:
-                                perc_contrib_total = (100 * row['Variação Absoluta'] / aumento_total) if aumento_total else 0
-                                delta_help = f"Responsável por {perc_contrib_total:.1f}% do aumento total. Variação: {row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
+                                delta_help_red = f"Variação: {row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
                                 st.metric(
                                     label=row['Grupo'],
-                                    value=f"{row['Fim']:.0f} chamados", 
-                                    delta=f"{row['Variação (%)']:+.1f}%" if not pd.isna(row['Variação (%)']) else "Grupo Novo", 
-                                    delta_color="inverse", # VERMELHO PARA AUMENTO
-                                    help=delta_help
+                                    value=f"{row['Fim']:.0f} chamados",
+                                    delta=f"{row['Variação (%)']:+.1f}%",
+                                    delta_color="inverse", # Verde para redução
+                                    help=delta_help_red
                                 )
-                            st.divider() 
+                            st.divider()
+
+                # Coluna da Direita: Pareto dos Aumentos
+                with col_aumentos_pareto:
+                    title_spacer1, title_col, title_spacer2 = st.columns([1, 2, 1])
+                    with title_col:
+                        st.markdown("<h3 style='text-align: center;'>Grupos que Precisam de Atenção</h3>", unsafe_allow_html=True) 
+                    
+                    if df_aumentos.empty:
+                        st.success("🎉 Nenhum grupo apresentou aumento no backlog na última semana!")
+                    else:                        
+                        aumento_total = df_aumentos['Variação Absoluta'].sum()
+                        if aumento_total <= 0: 
+                             st.info("Aumento total do backlog foi zero ou negativo.")
+                        else:
+                            df_aumentos = df_aumentos.sort_values(by='Variação Absoluta', ascending=False)
+                            df_aumentos['Cumulativo'] = df_aumentos['Variação Absoluta'].cumsum()
+                            df_aumentos['% Contribuição Acumulada'] = 100 * df_aumentos['Cumulativo'] / aumento_total
+                            
+                            limite_pareto = 80.0
+                            df_pareto = df_aumentos[df_aumentos['% Contribuição Acumulada'] <= limite_pareto + 5] 
+                            if df_pareto.empty and not df_aumentos.empty:
+                                df_pareto = df_aumentos.head(1)
+                            
+                            for _, row in df_pareto.iterrows():
+                                spacer1, metric_col, spacer2 = st.columns([1, 2, 1])
+                                with metric_col:
+                                    perc_contrib_total = (100 * row['Variação Absoluta'] / aumento_total) if aumento_total else 0
+                                    delta_help = f"Responsável por {perc_contrib_total:.1f}% do aumento total. Variação: {row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
+                                    st.metric(
+                                        label=row['Grupo'],
+                                        value=f"{row['Fim']:.0f} chamados", 
+                                        delta=f"{row['Variação (%)']:+.1f}%" if not pd.isna(row['Variação (%)']) else "Grupo Novo", 
+                                        delta_color="inverse", # VERMELHO PARA AUMENTO
+                                        help=delta_help
+                                    )
+                                st.divider() 
 
 except Exception as e:
-    st.error(f"Ocorreu um erro ao carregar os dados: {e}")
-    st.exception(e)
+    st.error(f"Ocorreu um erro geral ao carregar o dashboard: {e}")
+    st.exception(e) # Mostra detalhes do erro para debug
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-728 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-729 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
