@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-726 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final)
+# VERSÃO v0.9.20-727 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final Ajustado)
 
 import streamlit as st
 import pandas as pd
@@ -649,7 +649,7 @@ try:
         else: 
             st.info("Ainda não há dados históricos suficientes.")
             
-    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 Layout Final) ---
+    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 Layout Final Ajustado) ---
     with tab4:
         st.subheader("Análise Semana vs Semana: Variação do Backlog por Grupo")
         
@@ -710,8 +710,8 @@ try:
                     if df_reducoes.empty:
                          st.info("Nenhum grupo apresentou redução no backlog na última semana.")
                     else:
-                        df_reducoes = df_reducoes.sort_values(by='Variação Absoluta', ascending=True) # Ordena pela maior redução absoluta
-                        for _, row in df_reducoes.head(5).iterrows(): # Mostra os top 5
+                        df_reducoes = df_reducoes.sort_values(by='Variação Absoluta', ascending=True) 
+                        for _, row in df_reducoes.head(5).iterrows(): 
                             spacer1, metric_col, spacer2 = st.columns([1, 2, 1]) 
                             with metric_col:
                                 delta_help_red = f"Variação: {row['Variação Absoluta']:+.0f} (de {row['Início']:.0f} para {row['Fim']:.0f})"
@@ -726,11 +726,12 @@ try:
 
                 # Coluna da Direita: Pareto dos Aumentos
                 with col_aumentos_pareto:
-                    st.markdown("<h3 style='text-align: center; color: red;'>Grupos que Precisam de Atenção (Pareto)</h3>", unsafe_allow_html=True)
+                    # Título em Preto
+                    st.markdown("<h3 style='text-align: center;'>Grupos que Precisam de Atenção (Pareto)</h3>", unsafe_allow_html=True) 
                     if df_aumentos.empty:
                         st.success("🎉 Nenhum grupo apresentou aumento no backlog na última semana!")
                     else:
-                        st.caption("Grupos responsáveis por ~80% do aumento *total* do backlog.")
+                        # Caption removida
                         
                         aumento_total = df_aumentos['Variação Absoluta'].sum()
                         if aumento_total <= 0: 
@@ -754,7 +755,7 @@ try:
                                         label=row['Grupo'],
                                         value=f"{row['Fim']:.0f} chamados", 
                                         delta=f"{row['Variação (%)']:+.1f}%" if not pd.isna(row['Variação (%)']) else "Grupo Novo", 
-                                        delta_color="inverse", # <-- ALTERADO PARA VERMELHO
+                                        delta_color="inverse", # VERMELHO PARA AUMENTO
                                         help=delta_help
                                     )
                                 st.divider() 
