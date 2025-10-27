@@ -1,5 +1,3 @@
-# VERSÃO v0.9.20-713 (Base 0.9.7 + Fechados + Observações + Tab3 Nova c/ Avisos Ajustados)
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -221,7 +219,7 @@ def sync_ticket_data():
             update_github_file(st.session_state.repo, "ticket_observations.json", json_content.encode('utf-8'), commit_msg)
 
     st.session_state.ticket_editor['edited_rows'] = {}
-    st.session_state.scroll_to_details = True # <-- Lógica de scroll original mantida
+    st.session_state.scroll_to_details = True
 
 
 @st.cache_data(ttl=3600)
@@ -343,7 +341,6 @@ elif password:
     st.sidebar.error("Senha incorreta.")
 
 try:
-    # Lógica de carregamento de "contacted_tickets" (Original do 0.9.7)
     if 'contacted_tickets' not in st.session_state:
         try:
             file_content = repo.get_contents("contacted_tickets.json").decoded_content.decode("utf-8")
@@ -352,11 +349,9 @@ try:
             if e.status == 404: st.session_state.contacted_tickets = set()
             else: st.error(f"Erro ao carregar o estado dos tickets: {e}"); st.session_state.contacted_tickets = set()
 
-    # Carregamento das 'observations'
     if 'observations' not in st.session_state:
         st.session_state.observations = read_github_json_dict(repo, "ticket_observations.json")
     
-    # Lógica de scroll/query_params (Original do 0.9.7)
     needs_scroll = "scroll" in st.query_params
     if "faixa" in st.query_params:
         faixa_from_url = st.query_params.get("faixa")
@@ -366,7 +361,6 @@ try:
     if "scroll" in st.query_params or "faixa" in st.query_params:
         st.query_params.clear()
     
-    # Carregamento dos dados (Original do 0.9.7)
     df_atual = read_github_file(repo, "dados_atuais.csv")
     df_15dias = read_github_file(repo, "dados_15_dias.csv")
     df_fechados = read_github_file(repo, "dados_fechados.csv")
@@ -380,7 +374,6 @@ try:
     if 'ID do ticket' in df_atual.columns:
         df_atual['ID do ticket'] = df_atual['ID do ticket'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
     
-    # Cálculo de IDs Fechados (Original do 0.9.7 - necessário para as novas features)
     closed_ticket_ids = []
     if not df_fechados.empty:
         id_col_name = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_fechados.columns), None)
@@ -394,7 +387,6 @@ try:
     df_15dias_filtrado = df_15dias[~df_15dias['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     df_aging = analisar_aging(df_atual_filtrado)
     
-    # Definição de 'df_encerrados_filtrado' e 'df_evolucao'
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     
     tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
@@ -402,7 +394,6 @@ try:
     with tab1:
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
         if not df_encerrados.empty:
-            # Texto ajustado para usar a contagem de df_encerrados_filtrado
             info_messages.append(f"- **{len(df_encerrados_filtrado)} chamados fechados no dia** (exceto RH) foram deduzidos das contagens principais.")
         st.info("\n".join(info_messages))
         st.subheader("Análise de Antiguidade do Backlog Atual")
@@ -410,7 +401,6 @@ try:
         st.markdown(f"<p style='font-size: 0.9em; color: #666;'><i>Data de referência: {data_atual_str}{texto_hora}</i></p>", unsafe_allow_html=True)
         if not df_aging.empty:
             
-            # Cards de Métrica (Total + Fechados)
             total_chamados = len(df_aging)
             total_fechados = len(df_encerrados_filtrado)
             col_spacer1, col_total, col_fechados, col_spacer2 = st.columns([1, 1.5, 1.5, 1])
@@ -435,7 +425,6 @@ try:
             for i, row in aging_counts.iterrows():
                 with cols[i]:
                     faixa_encoded = quote(row['Faixa de Antiguidade'])
-                    # Lógica de link/scroll original do 0.9.7
                     card_html = f"""<a href="?faixa={faixa_encoded}&scroll=true" target="_self" class="metric-box"><span class="value">{row['Quantidade']}</span><span class="label">{row['Faixa de Antiguidade']}</span></a>"""
                     st.markdown(card_html, unsafe_allow_html=True)
         else:
@@ -454,16 +443,13 @@ try:
         elif not df_encerrados_filtrado.empty:
             st.data_editor(df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']], hide_index=True, disabled=True, use_container_width=True)
         else:
-            # Caso o arquivo de fechados exista, mas os IDs não batam ou sejam todos RH
             st.info("O arquivo de chamados encerrados do dia ainda não foi carregado.")
 
         if not df_aging.empty:
             st.markdown("---")
             st.subheader("Detalhar e Buscar Chamados")
-            # Info alterada para incluir 'Observações'
             st.info('Marque "Contato" se já falou com o usuário e a solicitação continua pendente. Use "Observações" para anotações.')
             
-            # Lógica de scroll original do 0.9.7
             if 'scroll_to_details' not in st.session_state:
                 st.session_state.scroll_to_details = False
             if needs_scroll or st.session_state.get('scroll_to_details', False):
@@ -478,13 +464,11 @@ try:
                 def highlight_row(row):
                     return ['background-color: #fff8c4'] * len(row) if row['Contato'] else [''] * len(row)
                 
-                # Inclusão da coluna 'Observações' no data_editor
                 filtered_df['Contato'] = filtered_df['ID do ticket'].apply(lambda id: str(id) in st.session_state.contacted_tickets)
-                filtered_df['Observações'] = filtered_df['ID do ticket'].apply(lambda id: st.session_state.observations.get(str(id), '')) # <-- ADICIONADO
+                filtered_df['Observações'] = filtered_df['ID do ticket'].apply(lambda id: st.session_state.observations.get(str(id), ''))
                 
                 st.session_state.last_filtered_df = filtered_df.reset_index(drop=True)
                 
-                # 'Observações' adicionada à lista
                 colunas_para_exibir_renomeadas = {
                     'Contato': 'Contato', 
                     'ID do ticket': 'ID do ticket', 
@@ -492,16 +476,16 @@ try:
                     'Atribuir a um grupo': 'Grupo Atribuído', 
                     'Dias em Aberto': 'Dias em Aberto', 
                     'Data de criação': 'Data de criação', 
-                    'Observações': 'Observações' # <-- ADICIONADO
+                    'Observações': 'Observações'
                 }
                 
                 st.data_editor(
                     st.session_state.last_filtered_df.rename(columns=colunas_para_exibir_renomeadas)[list(colunas_para_exibir_renomeadas.values())].style.apply(highlight_row, axis=1),
                     use_container_width=True, 
                     hide_index=True, 
-                    disabled=['ID do ticket', 'Descrição', 'Grupo Atribuído', 'Dias em Aberto', 'Data de criação'], # 'Observações' é editável
+                    disabled=['ID do ticket', 'Descrição', 'Grupo Atribuído', 'Dias em Aberto', 'Data de criação'],
                     key='ticket_editor', 
-                    on_change=sync_ticket_data # <-- ATUALIZADO
+                    on_change=sync_ticket_data
                 )
             else:
                 st.info("Não há chamados nesta categoria.")
@@ -517,7 +501,6 @@ try:
                 st.data_editor(resultados_busca[[col for col in colunas_para_exibir_busca if col in resultados_busca.columns]], use_container_width=True, hide_index=True, disabled=True)
     
     with tab2:
-        # Tab 2 mantida EXATAMENTE como no código 0.9.7
         st.subheader("Resumo do Backlog Atual")
         if not df_aging.empty:
             total_chamados = len(df_aging)
@@ -567,68 +550,59 @@ try:
         else:
             st.warning("Nenhum dado para gerar o report visual.")
 
-    # ==========================================================
-    # INÍCIO DA MODIFICAÇÃO (Eixo Categórico na Tab 3)
-    # ==========================================================
     with tab3:
         st.subheader("Evolução do Backlog")
         dias_evolucao = st.slider("Ver evolução dos últimos dias:", min_value=7, max_value=30, value=7, key="slider_evolucao")
         
-        # Recalcula os dados da evolução com base no slider
         df_evolucao_tab3 = carregar_dados_evolucao(repo, closed_ticket_ids_list=closed_ticket_ids, dias_para_analisar=dias_evolucao)
         
         if not df_evolucao_tab3.empty:
             
-            # Assegurar que 'Data' é datetime
             df_evolucao_tab3['Data'] = pd.to_datetime(df_evolucao_tab3['Data'])
-            # Filtrar para incluir apenas dias de semana (Seg=0 ... Sex=4)
             df_evolucao_tab3 = df_evolucao_tab3[df_evolucao_tab3['Data'].dt.dayofweek < 5].copy()
             
-            # Verificar se, após filtrar os fins de semana, ainda há dados
             if not df_evolucao_tab3.empty:
             
-                # Aviso 1: Para o gráfico de Total Geral
                 st.info("Esta visualização ainda está coletando dados históricos. Utilize as outras abas como referência principal por enquanto.")
                 
                 df_total_diario = df_evolucao_tab3.groupby('Data')['Total Chamados'].sum().reset_index()
                 df_total_diario = df_total_diario.sort_values('Data')
                 
-                # --- ALTERAÇÃO: Criar coluna de string para o eixo ---
                 df_total_diario['Data (Eixo)'] = df_total_diario['Data'].dt.strftime('%d/%m')
+                ordem_datas_total = df_total_diario['Data (Eixo)'].tolist()
                 
                 fig_total_evolucao = px.area(
                     df_total_diario,
-                    x='Data (Eixo)', # Usar a coluna de string
+                    x='Data (Eixo)',
                     y='Total Chamados',
                     title='Evolução do Total Geral de Chamados Abertos (Apenas Dias de Semana)',
                     markers=True,
-                    labels={"Data (Eixo)": "Data", "Total Chamados": "Total Geral de Chamados"} # Label ajustada
+                    labels={"Data (Eixo)": "Data", "Total Chamados": "Total Geral de Chamados"},
+                    category_orders={'Data (Eixo)': ordem_datas_total}
                 )
                 fig_total_evolucao.update_layout(height=400)
                 st.plotly_chart(fig_total_evolucao, use_container_width=True)
                 
                 st.markdown("---")
                 
-                # Aviso 2: Para o gráfico de Evolução por Grupo
                 st.info("Esta visualização já filtra os chamados fechados e permite filtrar grupos clicando 2x na legenda.")
 
-                # --- ALTERAÇÃO: Criar coluna de string para o eixo ---
-                # 1. Ordenar pelos dados datetime REAIS
                 df_evolucao_tab3_sorted = df_evolucao_tab3.sort_values('Data')
-                # 2. Criar a coluna de string para o eixo
                 df_evolucao_tab3_sorted['Data (Eixo)'] = df_evolucao_tab3_sorted['Data'].dt.strftime('%d/%m')
                 
-                # 3. Renomear e plotar
+                ordem_datas_grupo = df_evolucao_tab3_sorted['Data (Eixo)'].unique().tolist()
+                
                 df_filtrado_display = df_evolucao_tab3_sorted.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
                 
                 fig_evolucao_grupo = px.line(
-                    df_filtrado_display, # DataFrame já ordenado
-                    x='Data (Eixo)', # Usar a coluna de string
+                    df_filtrado_display,
+                    x='Data (Eixo)',
                     y='Total Chamados',
                     color='Grupo Atribuído',
                     title='Evolução por Grupo (Apenas Dias de Semana)',
                     markers=True,
-                    labels={ "Data (Eixo)": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" } # Label ajustada
+                    labels={ "Data (Eixo)": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" },
+                    category_orders={'Data (Eixo)': ordem_datas_grupo}
                 )
                 fig_evolucao_grupo.update_layout(height=600)
                 st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
@@ -638,14 +612,10 @@ try:
                 
         else: 
             st.info("Ainda não há dados históricos suficientes.")
-    # ==========================================================
-    # FIM DA MODIFICAÇÃO
-    # ==========================================================
 
 except Exception as e:
     st.error(f"Ocorreu um erro ao carregar os dados: {e}")
     st.exception(e)
 
 st.markdown("---")
-# Rodapé atualizado para a versão solicitada
-st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.20-713 | Este dashboard está em desenvolvimento.</p>""", unsafe_allow_html=True)
+st.markdown("""<p style='text-align: center; color: #666; font-size: 0.9em;'>v0.9.20-715 | Este dashboard está em desenvolvimento.</p>""", unsafe_allow_html=True)
