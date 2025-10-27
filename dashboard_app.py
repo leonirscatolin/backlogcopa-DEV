@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-717 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza de NaN + Rodapé)
+# VERSÃO v0.9.20-719 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza de NaN + Rodapé + Tab4 Resumo)
 
 import streamlit as st
 import pandas as pd
@@ -395,7 +395,7 @@ try:
     
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     
-    tab1, tab2, tab3 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal", "Análise de Tendência"])
     
     with tab1:
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
@@ -618,6 +618,115 @@ try:
                 
         else: 
             st.info("Ainda não há dados históricos suficientes.")
+            
+    # --- INÍCIO DA MODIFICAÇÃO (Nova Tab 4) ---
+    with tab4:
+        st.subheader("Resumo Semanal: Grupos com Maiores Variações")
+        
+        dias_referencia = 7
+        df_evolucao_7d = carregar_dados_evolucao(repo, closed_ticket_ids_list=closed_ticket_ids, dias_para_analisar=dias_referencia)
+        
+        if df_evolucao_7d.empty:
+            st.info(f"Não há dados históricos (snapshots) suficientes dos últimos {dias_referencia} dias para calcular a tendência.")
+        else:
+            df_evolucao_7d['Data'] = pd.to_datetime(df_evolucao_7d['Data'])
+            
+            data_inicio = df_evolucao_7d['Data'].min()
+            df_inicio_data = df_evolucao_7d[df_evolucao_7d['Data'] == data_inicio].rename(
+                columns={'Total Chamados': 'Início', 'Atribuir a um grupo': 'Grupo'}
+            )[['Grupo', 'Início']]
+            
+            df_fim_data = df_atual_filtrado.groupby('Atribuir a um grupo').size().reset_index(name='Fim').rename(
+                columns={'Atribuir a um grupo': 'Grupo'}
+            )
+            
+            st.info(f"Comparando o volume de backlog do dia {data_inicio.strftime('%d/%m/%Y')} (Início) com os dados atuais de {data_atual_str} (Fim).")
+            st.markdown("---")
+
+            df_tendencia = pd.merge(df_inicio_data, df_fim_data, on='Grupo', how='outer').fillna(0)
+            df_tendencia['Variação Absoluta'] = df_tendencia['Fim'] - df_tendencia['Início']
+            
+            df_tendencia['Variação (%)'] = (100 * (df_tendencia['Fim'] - df_tendencia['Início']) / df_tendencia['Início'])
+            df_tendencia['Variação (%)'] = df_tendencia['Variação (%)'].replace([np.inf, -np.inf], np.nan) 
+            
+            limite_estabilidade = 5.0 # Define 5% como o limite para ser "expressivo"
+            
+            df_reducoes = df_tendencia[df_tendencia['Variação (%)'] < -limite_estabilidade].sort_values(by='Variação (%)', ascending=True)
+            df_aumentos = df_tendencia[df_tendencia['Variação (%)'] > limite_estabilidade].sort_values(by='Variação (%)', ascending=False)
+
+            col_melhorias, col_piorias = st.columns(2)
+
+            with col_melhorias:
+                st.markdown("### 📉 Grupos que Melhoraram")
+                if df_reducoes.empty:
+                    st.info(f"Nenhum grupo teve redução expressiva (maior que {limite_estabilidade}%) na semana.")
+                else:
+                    for _, row in df_reducoes.head(5).iterrows():
+                        delta_str = f"{row['Variação (%)']:.1f}% ({row['Variação Absoluta']:+.0f})"
+                        st.metric(
+                            label=row['Grupo'], 
+                            value=f"{row['Fim']:.0f} chamados", 
+                            delta=delta_str, 
+                            delta_color="inverse"
+                        )
+                        st.caption(f"Valor inicial: {row['Início']:.0f} chamados")
+                        st.divider()
+
+            with col_piorias:
+                st.markdown("### 📈 Grupos que Pioraram")
+                if df_aumentos.empty:
+                    st.info(f"Nenhum grupo teve aumento expressivo (maior que {limite_estabilidade}%) na semana.")
+                else:
+                    for _, row in df_aumentos.head(5).iterrows():
+                        delta_str = f"{row['Variação (%)']:.1f}% ({row['Variação Absoluta']:+.0f})"
+                        st.metric(
+                            label=row['Grupo'], 
+                            value=f"{row['Fim']:.0f} chamados", 
+                            delta=delta_str, 
+                            delta_color="normal"
+                        )
+                        st.caption(f"Valor inicial: {row['Início']:.0f} chamados")
+                        st.divider()
+            
+            st.markdown("---")
+            with st.expander("Ver tabela completa de tendência (Todos os Grupos)"):
+                def get_tendencia_status(variacao):
+                    if pd.isna(variacao):
+                        return "Grupo Novo"
+                    if variacao < -limite_estabilidade:
+                        return "Redução 📉"
+                    if variacao > limite_estabilidade:
+                        return "Aumento 📈"
+                    return "Estável ➖"
+
+                df_tendencia['Tendência'] = df_tendencia['Variação (%)'].apply(get_tendencia_status)
+                df_tendencia = df_tendencia.sort_values(by='Variação (%)', ascending=True, na_position='last')
+                df_tendencia = df_tendencia[['Grupo', 'Início', 'Fim', 'Variação Absoluta', 'Variação (%)', 'Tendência']]
+                
+                def style_variacao(val):
+                    if pd.isna(val):
+                        return 'background-color: #f0f2f6'
+                    color = ''
+                    if val > limite_estabilidade:
+                        color = '#ffcccc'
+                    elif val < -limite_estabilidade:
+                        color = '#ccffcc'
+                    return f'background-color: {color}'
+
+                st.dataframe(
+                    df_tendencia.style.applymap(
+                        style_variacao, 
+                        subset=['Variação (%)']
+                    ).format({
+                        'Variação (%)': '{:+.1f}%', 
+                        'Início': '{:.0f}', 
+                        'Fim': '{:.0f}', 
+                        'Variação Absoluta': '{:+.0f}'
+                    }),
+                    use_container_width=True,
+                    hide_index=True
+                )
+    # --- FIM DA MODIFICAÇÃO ---
 
 except Exception as e:
     st.error(f"Ocorreu um erro ao carregar os dados: {e}")
@@ -625,6 +734,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-717 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-719 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
