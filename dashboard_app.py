@@ -568,7 +568,7 @@ try:
             st.warning("Nenhum dado para gerar o report visual.")
 
     # ==========================================================
-    # INÍCIO DA MODIFICAÇÃO (Filtro de Fim de Semana na Tab 3)
+    # INÍCIO DA MODIFICAÇÃO (Eixo Categórico na Tab 3)
     # ==========================================================
     with tab3:
         st.subheader("Evolução do Backlog")
@@ -592,13 +592,17 @@ try:
                 
                 df_total_diario = df_evolucao_tab3.groupby('Data')['Total Chamados'].sum().reset_index()
                 df_total_diario = df_total_diario.sort_values('Data')
+                
+                # --- ALTERAÇÃO: Criar coluna de string para o eixo ---
+                df_total_diario['Data (Eixo)'] = df_total_diario['Data'].dt.strftime('%d/%m')
+                
                 fig_total_evolucao = px.area(
                     df_total_diario,
-                    x='Data',
+                    x='Data (Eixo)', # Usar a coluna de string
                     y='Total Chamados',
                     title='Evolução do Total Geral de Chamados Abertos (Apenas Dias de Semana)',
                     markers=True,
-                    labels={"Data": "Data", "Total Chamados": "Total Geral de Chamados"}
+                    labels={"Data (Eixo)": "Data", "Total Chamados": "Total Geral de Chamados"} # Label ajustada
                 )
                 fig_total_evolucao.update_layout(height=400)
                 st.plotly_chart(fig_total_evolucao, use_container_width=True)
@@ -608,16 +612,23 @@ try:
                 # Aviso 2: Para o gráfico de Evolução por Grupo
                 st.info("Esta visualização já filtra os chamados fechados e permite filtrar grupos clicando 2x na legenda.")
 
-                # Gráfico de linhas sem o multiselect
-                df_filtrado_display = df_evolucao_tab3.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
+                # --- ALTERAÇÃO: Criar coluna de string para o eixo ---
+                # 1. Ordenar pelos dados datetime REAIS
+                df_evolucao_tab3_sorted = df_evolucao_tab3.sort_values('Data')
+                # 2. Criar a coluna de string para o eixo
+                df_evolucao_tab3_sorted['Data (Eixo)'] = df_evolucao_tab3_sorted['Data'].dt.strftime('%d/%m')
+                
+                # 3. Renomear e plotar
+                df_filtrado_display = df_evolucao_tab3_sorted.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
+                
                 fig_evolucao_grupo = px.line(
-                    df_filtrado_display.sort_values('Data'),
-                    x='Data',
+                    df_filtrado_display, # DataFrame já ordenado
+                    x='Data (Eixo)', # Usar a coluna de string
                     y='Total Chamados',
                     color='Grupo Atribuído',
                     title='Evolução por Grupo (Apenas Dias de Semana)',
                     markers=True,
-                    labels={ "Data": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" }
+                    labels={ "Data (Eixo)": "Data", "Total Chamados": "Nº de Chamados", "Grupo Atribuído": "Grupo" } # Label ajustada
                 )
                 fig_evolucao_grupo.update_layout(height=600)
                 st.plotly_chart(fig_evolucao_grupo, use_container_width=True)
