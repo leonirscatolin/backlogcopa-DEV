@@ -1,4 +1,4 @@
-# VERSÃO v0.9.30-745 (Relatório .eml para Download)
+# VERSÃO v0.9.30-746 (Relatório .eml com Tabelas + Dias Aberto Fechados)
 
 import streamlit as st
 import pandas as pd
@@ -17,7 +17,7 @@ import json
 import colorsys
 import re
 
-# Imports para Email (usados para criar o .eml)
+# Imports para Email/EML
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
@@ -30,7 +30,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ... (Seu CSS original completo - sem mudanças) ...
 st.html("""
 <style>
 #GithubIcon { visibility: hidden; }
@@ -79,16 +78,17 @@ a.metric-box:hover {
 .delta-negative { color: #5cb85c; } /* Verde para redução */
 .delta-neutral { color: #666666; } /* Cinza para sem mudança ou N/A */
 
-/* Estilo Básico para Tabelas no Email */
+/* Estilo Básico para Tabelas no Email/.eml */
 .email-table {
     border-collapse: collapse;
     width: 90%;
     margin: 20px auto;
     font-family: sans-serif;
+    font-size: 0.9em;
 }
 .email-table th, .email-table td {
     border: 1px solid #ddd;
-    padding: 8px;
+    padding: 6px;
     text-align: left;
 }
 .email-table th {
@@ -113,7 +113,6 @@ a.metric-box:hover {
 # --- Funções do GitHub e Processamento de Dados (sem mudanças) ---
 @st.cache_resource
 def get_github_repo():
-    # ... (sem mudanças) ...
     try:
         expected_repo_name = st.secrets.get("EXPECTED_REPO")
         if not expected_repo_name:
@@ -133,7 +132,6 @@ def get_github_repo():
         st.stop()
 
 def update_github_file(_repo, file_path, file_content, commit_message):
-    # ... (sem mudanças) ...
     try:
         contents = _repo.get_contents(file_path)
         if isinstance(file_content, str):
@@ -154,7 +152,6 @@ def update_github_file(_repo, file_path, file_content, commit_message):
 
 @st.cache_data(ttl=300)
 def read_github_file(_repo, file_path):
-    # ... (sem mudanças) ...
     try:
         content_file = _repo.get_contents(file_path)
         content_bytes = content_file.decoded_content
@@ -199,7 +196,6 @@ def read_github_file(_repo, file_path):
 
 @st.cache_data(ttl=300)
 def read_github_text_file(_repo, file_path):
-    # ... (sem mudanças) ...
     try:
         content_file = _repo.get_contents(file_path)
         content = content_file.decoded_content.decode("utf-8")
@@ -222,7 +218,6 @@ def read_github_text_file(_repo, file_path):
 
 @st.cache_data(ttl=300)
 def read_github_json_dict(_repo, file_path):
-    # ... (sem mudanças) ...
     try:
         file_content = _repo.get_contents(file_path).decoded_content.decode("utf-8")
         return json.loads(file_content) if file_content else {}
@@ -238,7 +233,6 @@ def read_github_json_dict(_repo, file_path):
         return {}
 
 def process_uploaded_file(uploaded_file):
-    # ... (sem mudanças) ...
     if uploaded_file is None:
         return None
     try:
@@ -263,7 +257,6 @@ def process_uploaded_file(uploaded_file):
         return None
 
 def processar_dados_comparativos(df_atual, df_15dias):
-    # ... (sem mudanças) ...
     contagem_atual = df_atual.groupby('Atribuir a um grupo').size().reset_index(name='Atual')
     contagem_15dias = df_15dias.groupby('Atribuir a um grupo').size().reset_index(name='15 Dias Atrás')
     df_comparativo = pd.merge(contagem_atual, contagem_15dias, on='Atribuir a um grupo', how='outer').fillna(0)
@@ -273,7 +266,6 @@ def processar_dados_comparativos(df_atual, df_15dias):
 
 @st.cache_data
 def categorizar_idade_vetorizado(dias_series):
-    # ... (sem mudanças) ...
     condicoes = [
         dias_series >= 30, (dias_series >= 21) & (dias_series <= 29),
         (dias_series >= 11) & (dias_series <= 20), (dias_series >= 6) & (dias_series <= 10),
@@ -284,35 +276,52 @@ def categorizar_idade_vetorizado(dias_series):
 
 @st.cache_data
 def analisar_aging(_df_atual):
-    # ... (sem mudanças) ...
+    """Calcula Dias em Aberto (até hoje) e Faixa de Antiguidade."""
     df = _df_atual.copy()
     date_col_name = None
     if 'Data de criação' in df.columns: date_col_name = 'Data de criação'
     elif 'Data de Criacao' in df.columns: date_col_name = 'Data de Criacao'
     if not date_col_name:
-        return pd.DataFrame()
+        st.warning("Coluna 'Data de criação' não encontrada para análise de aging.")
+        df['Dias em Aberto'] = pd.NA
+        df['Faixa de Antiguidade'] = "Erro de Data"
+        return df
+    
     df[date_col_name] = pd.to_datetime(df[date_col_name], errors='coerce')
     linhas_invalidas = df[df[date_col_name].isna()]
     if not linhas_invalidas.empty:
-        with st.expander(f"⚠️ Atenção: {len(linhas_invalidas)} chamados foram descartados por data inválida ou vazia."):
-            st.dataframe(linhas_invalidas.head())
-    df.dropna(subset=[date_col_name], inplace=True)
+        # Só mostra o expander se realmente tiver linhas inválidas
+        # E se a coluna de data existir (para evitar erro no dropna)
+        if date_col_name in df.columns:
+            with st.expander(f"⚠️ Atenção: {len(linhas_invalidas)} chamados foram descartados da análise de aging por data inválida ou vazia."):
+                st.dataframe(linhas_invalidas[[c for c in ['ID do ticket', date_col_name] if c in linhas_invalidas.columns]].head())
+            df.dropna(subset=[date_col_name], inplace=True)
+        else: # Se a coluna de data nem existe, não podemos calcular
+             df['Dias em Aberto'] = pd.NA
+             df['Faixa de Antiguidade'] = "Erro de Data"
+             return df
+
+
     hoje = pd.to_datetime('today').normalize()
-    data_criacao_normalizada = df[date_col_name].dt.normalize()
-    dias_calculados = (hoje - data_criacao_normalizada).dt.days
-    df['Dias em Aberto'] = (dias_calculados - 1).clip(lower=0)
-    df['Faixa de Antiguidade'] = categorizar_idade_vetorizado(df['Dias em Aberto'])
+    # Certifique-se que a coluna existe e é datetime antes de calcular
+    if date_col_name in df.columns and pd.api.types.is_datetime64_any_dtype(df[date_col_name]):
+        data_criacao_normalizada = df[date_col_name].dt.normalize()
+        dias_calculados = (hoje - data_criacao_normalizada).dt.days
+        df['Dias em Aberto'] = (dias_calculados - 1).clip(lower=0)
+        df['Faixa de Antiguidade'] = categorizar_idade_vetorizado(df['Dias em Aberto'])
+    else: # Fallback se algo der errado
+        df['Dias em Aberto'] = pd.NA
+        df['Faixa de Antiguidade'] = "Erro de Cálculo"
+
     return df
 
 def get_status(row):
-    # ... (sem mudanças) ...
     diferenca = row['Diferença']
     if diferenca > 0: return "Alta Demanda"
     elif diferenca == 0: return "Estável / Atenção"
     else: return "Redução de Backlog"
 
 def get_image_as_base64(path):
-    # ... (sem mudanças) ...
     try:
         with open(path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode()
@@ -320,7 +329,6 @@ def get_image_as_base64(path):
         return None
 
 def sync_ticket_data():
-    # ... (sem mudanças) ...
     if 'ticket_editor' not in st.session_state or not st.session_state.ticket_editor.get('edited_rows'):
         return
     edited_rows = st.session_state.ticket_editor['edited_rows']
@@ -328,7 +336,11 @@ def sync_ticket_data():
     observation_changed = False
     for row_index, changes in edited_rows.items():
         try:
-            ticket_id = str(st.session_state.last_filtered_df.iloc[row_index]['ID do ticket'])
+            # Usar .get para evitar KeyError se a coluna não existir temporariamente
+            ticket_id = st.session_state.last_filtered_df.iloc[row_index].get('ID do ticket')
+            if ticket_id is None: continue # Pula linha se ID não for encontrado
+            ticket_id = str(ticket_id)
+
             if 'Contato' in changes:
                 current_contact_status = ticket_id in st.session_state.contacted_tickets
                 new_contact_status = changes['Contato']
@@ -343,8 +355,12 @@ def sync_ticket_data():
                     st.session_state.observations[ticket_id] = new_observation
                     observation_changed = True
         except IndexError:
-            st.warning(f"Erro ao processar linha {row_index}.")
+            st.warning(f"Erro ao processar linha editada {row_index} (índice fora dos limites).")
             continue
+        except Exception as e:
+            st.warning(f"Erro inesperado ao processar edição da linha {row_index}: {e}")
+            continue
+
 
     if contact_changed or observation_changed:
         now_str = datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')
@@ -358,7 +374,9 @@ def sync_ticket_data():
             commit_msg = f"Atualizando observações em {now_str}"
             update_github_file(st.session_state.repo, "ticket_observations.json", json_content.encode('utf-8'), commit_msg)
 
-    st.session_state.ticket_editor['edited_rows'] = {}
+    # Limpar edições pendentes SOMENTE se a sincronização foi bem-sucedida (ou não necessária)
+    if 'ticket_editor' in st.session_state:
+        st.session_state.ticket_editor['edited_rows'] = {}
     st.session_state.scroll_to_details = True
 
 @st.cache_data(ttl=3600)
@@ -704,7 +722,7 @@ def img_to_bytes(img):
     img_buffer.seek(0)
     return img_buffer.getvalue()
 
-# --- Função para Gerar Conteúdo HTML (mantida da versão anterior) ---
+# --- Função para Gerar Conteúdo HTML (com Tabelas) ---
 def gerar_conteudo_email_html(
     fig_composicao_grupo,
     total_aberto, total_fechados, data_atual, hora_atual,
@@ -714,23 +732,27 @@ def gerar_conteudo_email_html(
     hoje_counts_df, df_comparacao_dados, data_comparacao_str, ordem_faixas, formatar_delta_card_func,
     fig_evol_7_dias
 ):
-    """Gera o corpo HTML do email/eml e os dados das imagens para anexar."""
-    # ... (sem mudanças, continua gerando HTML e dict de imagens) ...
+    """
+    (v746) Gera o corpo HTML do email/eml e os dados das imagens para anexar.
+    Usa TABELAS HTML para representar os gráficos Plotly.
+    """
+    
     html_parts = []
     images_to_attach = {} # Dicionário { 'cid': image_bytes }
 
+    # --- Cabeçalho ---
     html_parts.append("<html><head><style>")
     html_parts.append("""
-        .email-table { border-collapse: collapse; width: 90%; margin: 20px auto; font-family: sans-serif; }
-        .email-table th, .email-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .email-table { border-collapse: collapse; width: 90%; margin: 20px auto; font-family: sans-serif; font-size: 0.9em;}
+        .email-table th, .email-table td { border: 1px solid #ddd; padding: 6px; text-align: left; }
         .email-table th { background-color: #f2f2f2; font-weight: bold; }
         .email-h2 { font-family: sans-serif; color: #333; text-align: center; margin-top: 30px; margin-bottom: 10px; }
         .email-center { text-align: center; margin: 20px 0; }
-        svg { max-width: 100%; height: auto; }
     """)
     html_parts.append("</style></head><body>")
     html_parts.append(f"<h1 style='text-align:center; font-family: sans-serif;'>Relatório Backlog - {data_atual}</h1>")
 
+    # --- KPIs do Topo (Imagem) ---
     html_parts.append("<h2 class='email-h2'>Cards Principais</h2>")
     try:
         img_kpis_topo = _criar_imagem_kpis_topo(total_aberto, total_fechados, data_atual, hora_atual)
@@ -741,6 +763,7 @@ def gerar_conteudo_email_html(
     except Exception as e:
         html_parts.append(f"<p style='color:red; text-align:center;'>Erro ao gerar KPIs do topo: {e}</p>")
 
+    # --- KPIs de Aging (Imagem) ---
     html_parts.append("<h2 class='email-h2'>Cards de Antiguidade</h2>")
     try:
         img_kpis_aging = _criar_imagem_kpis_aging(df_aging_counts)
@@ -751,6 +774,7 @@ def gerar_conteudo_email_html(
     except Exception as e:
         html_parts.append(f"<p style='color:red; text-align:center;'>Erro ao gerar KPIs de antiguidade: {e}</p>")
 
+    # --- Gráficos (Como Tabelas HTML) ---
     graph_configs = [
         ("Composição da Idade do Backlog por Grupo", fig_composicao_grupo),
         ("Evolução do Total Geral", fig_evol_geral),
@@ -762,14 +786,69 @@ def gerar_conteudo_email_html(
         html_parts.append(f"<h2 class='email-h2'>{title}</h2>")
         if fig and fig.data:
             try:
-                svg_str = fig.to_svg(validate=False)
-                html_parts.append(f"<div class='email-center'>{svg_str}</div>")
+                all_data = []
+                if isinstance(fig.data[0], go.Bar) or isinstance(fig.data[0], go.Scatter) or isinstance(fig.data[0], go.Area):
+                     if len(fig.data) == 1:
+                         trace = fig.data[0]
+                         # Verificar se x e y não são None e têm o mesmo comprimento
+                         if trace.x is not None and trace.y is not None and len(trace.x) == len(trace.y):
+                             df_graph = pd.DataFrame({'Eixo X': trace.x, 'Valor': trace.y})
+                             all_data.append(df_graph)
+                         else:
+                             st.warning(f"Dados inconsistentes (x/y) encontrados na trace para '{title}'")
+                     else:
+                         temp_dfs = []
+                         base_x = fig.data[0].x # Assume que todos têm o mesmo eixo X
+                         if base_x is None:
+                              st.warning(f"Eixo X não encontrado na primeira trace para '{title}'")
+                              continue # Pula este gráfico se o eixo X base for None
+
+                         df_base = pd.DataFrame({'Eixo X': base_x})
+
+                         for trace in fig.data:
+                              if trace.y is not None and len(base_x) == len(trace.y):
+                                   # Usar o nome da trace como nome da coluna, fallback se não houver nome
+                                   col_name = trace.name if trace.name else f"Trace_{len(temp_dfs)+1}"
+                                   df_trace = pd.DataFrame({col_name: trace.y})
+                                   temp_dfs.append(df_trace)
+                              else:
+                                   st.warning(f"Trace '{trace.name}' em '{title}' tem dados y inconsistentes ou ausentes.")
+
+                         if temp_dfs:
+                              df_graph = pd.concat([df_base] + temp_dfs, axis=1)
+                              all_data.append(df_graph)
+
+                if not all_data:
+                     html_parts.append(f"<p style='text-align:center; color:orange;'>[Não foi possível extrair dados tabulares para este gráfico]</p>")
+                else:
+                    for i, df_data in enumerate(all_data):
+                        if df_data.empty: continue # Pula se o dataframe estiver vazio
+
+                        if len(df_data) > 50:
+                             html_parts.append(f"<p style='text-align:center; font-size:0.8em;'>(Tabela truncada em 50 linhas)</p>")
+                             df_data = df_data.head(50)
+                        
+                        if 'customdata' in df_data.columns: df_data = df_data.drop(columns=['customdata'])
+                        if 'hovertext' in df_data.columns: df_data = df_data.drop(columns=['hovertext'])
+
+                        # Tentar converter datetime para string antes de gerar HTML
+                        for col in df_data.select_dtypes(include=['datetime64[ns]']).columns:
+                             df_data[col] = df_data[col].dt.strftime('%d/%m/%Y')
+
+                        try:
+                           html_table = df_data.to_html(classes='email-table', index=False, border=0, justify='center')
+                           html_parts.append(html_table)
+                        except Exception as html_err:
+                           st.warning(f"Erro ao converter dados de '{title}' para HTML: {html_err}")
+                           html_parts.append(f"<p style='text-align:center; color:red;'>[Erro ao gerar tabela para este gráfico]</p>")
+
             except Exception as e:
-                st.warning(f"Falha ao gerar SVG para '{title}': {e}")
-                html_parts.append(f"<p style='text-align:center; color:orange;'>[Visualização do gráfico indisponível - Falha na exportação SVG: {e}]</p>")
+                st.warning(f"Falha ao gerar tabela HTML para '{title}': {e}")
+                html_parts.append(f"<p style='text-align:center; color:orange;'>[Visualização tabular indisponível - Falha na extração de dados: {e}]</p>")
         else:
             html_parts.append("<p style='text-align:center; color:grey;'>[Gráfico indisponível (sem dados históricos)]</p>")
 
+    # --- Comparativo de Aging (Imagem) ---
     html_parts.append("<h2 class='email-h2'>Comparativo de Antiguidade (Hoje vs. 7 dias)</h2>")
     try:
         img_kpis_comp_aging = _criar_imagem_kpis_comparativo_aging(
@@ -782,38 +861,32 @@ def gerar_conteudo_email_html(
     except Exception as e:
          html_parts.append(f"<p style='color:red; text-align:center;'>Erro ao gerar KPIs comparativos: {e}</p>")
 
+    # --- Rodapé ---
     html_parts.append("</body></html>")
     
     return "".join(html_parts), images_to_attach
 
-# --- Nova Função para Gerar Arquivo .eml ---
+# --- Função para Gerar Arquivo .eml (sem mudanças) ---
 def gerar_arquivo_eml(subject, html_body, images_to_attach):
     """Cria o conteúdo de um arquivo .eml como bytes."""
     try:
-        # Criar a mensagem
-        message = MIMEMultipart('related') # 'related' para imagens inline
+        message = MIMEMultipart('related')
         message['Subject'] = subject
-        # Adicionar cabeçalhos básicos para o arquivo .eml
-        message['From'] = "relatorio@dashboard.com" # Remetente genérico
-        message['To'] = "destinatario@exemplo.com" # Destinatário genérico
+        message['From'] = "relatorio@dashboard.com"
+        message['To'] = "destinatario@exemplo.com"
         message['Date'] = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
         message['MIME-Version'] = "1.0"
 
-        # Anexar parte HTML
-        message.attach(MIMEText(html_body, 'html', 'utf-8')) # Especificar utf-8
+        message.attach(MIMEText(html_body, 'html', 'utf-8'))
 
-        # Anexar imagens
         for cid, img_bytes in images_to_attach.items():
             img = MIMEImage(img_bytes)
             img.add_header('Content-ID', f'<{cid}>')
-            # Adicionar Content-Disposition pode ajudar alguns clientes de email
             img.add_header('Content-Disposition', 'inline', filename=f'{cid}.png')
             message.attach(img)
             
-        # Converter a mensagem completa para bytes
         eml_bytes = message.as_bytes()
         
-        # Retornar como BytesIO para st.download_button
         return BytesIO(eml_bytes)
 
     except Exception as e:
@@ -821,7 +894,7 @@ def gerar_arquivo_eml(subject, html_body, images_to_attach):
         st.exception(e)
         return None
 
-# --- Fim das Novas Funções ---
+# --- Fim das Funções de Relatório ---
 
 
 logo_copa_b64 = get_image_as_base64("logo_sidebar.png")
@@ -946,14 +1019,13 @@ try:
             df_fechados[id_col_name] = df_fechados[id_col_name].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
             closed_ticket_ids = df_fechados[id_col_name].dropna().unique()
 
-    df_encerrados = df_atual[df_atual['ID do ticket'].isin(closed_ticket_ids)]
+    df_encerrados = df_atual[df_atual['ID do ticket'].isin(closed_ticket_ids)].copy() # Adicionado .copy()
     df_abertos = df_atual[~df_atual['ID do ticket'].isin(closed_ticket_ids)]
     df_atual_filtrado = df_abertos[~df_abertos['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     df_15dias_filtrado = df_15dias[~df_15dias['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     df_aging = analisar_aging(df_atual_filtrado)
-    df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
+    df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)].copy() # Adicionado .copy()
 
-    
     # --- Pré-cálculo dos dados e gráficos (sem mudanças) ---
     total_chamados = len(df_aging) if not df_aging.empty else 0
     total_fechados = len(df_encerrados_filtrado)
@@ -969,7 +1041,7 @@ try:
     else:
         aging_counts = pd.DataFrame({'Faixa de Antiguidade': ordem_faixas, 'Quantidade': 0})
 
-    fig_stacked_bar_para_relatorio = go.Figure() # Renomeado para clareza
+    fig_stacked_bar_para_relatorio = go.Figure()
     chart_data = pd.DataFrame()
     sorted_new_labels = []
     color_map = {}
@@ -1098,12 +1170,11 @@ try:
         st.error(f"Ocorreu um erro ao pré-calcular dados da Tab4: {e_tab4}")
     
     
-    tab1, tab2, tab3, tab4 = st.tabs(["Dashboard Completo", "Report Visual & Download", "Evolução Semanal", "Evolução Aging"]) # Renomeado Tab2
+    tab1, tab2, tab3, tab4 = st.tabs(["Dashboard Completo", "Report Visual & Download", "Evolução Semanal", "Evolução Aging"])
 
     with tab1:
-        # ... (Código da Tab1 sem mudanças) ...
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
-        if not df_encerrados.empty:
+        if not df_encerrados_filtrado.empty: # Usar df_encerrados_filtrado aqui
             info_messages.append(f"- **{len(df_encerrados_filtrado)} chamados fechados no dia** (exceto RH) foram deduzidos das contagens principais.")
         st.info("\n".join(info_messages))
         st.subheader("Análise de Antiguidade do Backlog Atual")
@@ -1140,9 +1211,53 @@ try:
         if df_fechados.empty:
             st.info("O arquivo de chamados encerrados ainda não foi carregado.")
         elif not df_encerrados_filtrado.empty:
-            st.data_editor(df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']], hide_index=True, disabled=True, width='stretch')
+            # --- Início da Modificação: Calcular Dias Abertos para Encerrados ---
+            df_encerrados_display = df_encerrados_filtrado.copy()
+            
+            # Reutilizar a lógica de cálculo de 'analisar_aging' aqui
+            date_col_enc = next((col for col in ['Data de criação', 'Data de Criacao'] if col in df_encerrados_display.columns), None)
+            if date_col_enc:
+                df_encerrados_display[date_col_enc] = pd.to_datetime(df_encerrados_display[date_col_enc], errors='coerce')
+                # Calcular dias abertos até HOJE (data do relatório), pois não temos data de fechamento
+                hoje_dt = pd.to_datetime('today').normalize()
+                # Filtrar linhas com datas válidas antes do cálculo
+                valid_dates_mask = df_encerrados_display[date_col_enc].notna()
+                if valid_dates_mask.any():
+                    data_criacao_norm = df_encerrados_display.loc[valid_dates_mask, date_col_enc].dt.normalize()
+                    dias_calc = (hoje_dt - data_criacao_norm).dt.days
+                    df_encerrados_display.loc[valid_dates_mask, 'Dias em Aberto'] = (dias_calc - 1).clip(lower=0)
+                # Preencher NA para datas inválidas ou se a coluna não existir
+                if 'Dias em Aberto' not in df_encerrados_display.columns:
+                     df_encerrados_display['Dias em Aberto'] = pd.NA
+                else:
+                     df_encerrados_display['Dias em Aberto'] = df_encerrados_display['Dias em Aberto'].fillna(pd.NA)
+
+                # Formatar coluna de data para exibição
+                df_encerrados_display[date_col_enc] = df_encerrados_display[date_col_enc].dt.strftime('%d/%m/%Y')
+
+            else:
+                 df_encerrados_display['Dias em Aberto'] = "Data Criação?" # Indicar que a coluna não foi encontrada
+
+            # Selecionar e renomear colunas para exibição
+            colunas_encerrados = ['ID do ticket', 'Descrição', 'Atribuir a um grupo', 'Dias em Aberto']
+            # Adicionar data de criação se existir
+            if date_col_enc and date_col_enc not in colunas_encerrados:
+                colunas_encerrados.append(date_col_enc)
+            
+            # Filtrar colunas que realmente existem no DataFrame
+            colunas_encerrados_existentes = [col for col in colunas_encerrados if col in df_encerrados_display.columns]
+
+            st.data_editor(
+                df_encerrados_display[colunas_encerrados_existentes],
+                hide_index=True,
+                disabled=True, # Desabilitar edição para esta tabela
+                width='stretch'
+                )
+            # --- Fim da Modificação ---
         else:
-            st.info("O arquivo de chamados encerrados do dia ainda não foi carregado.")
+            # Mensagem original se não houver encerrados (após filtro RH)
+             st.info("Nenhum chamado encerrado (exceto RH) carregado para hoje.")
+
 
         if not df_aging.empty:
             st.markdown("---")
@@ -1159,19 +1274,35 @@ try:
             filtered_df = df_aging[df_aging['Faixa de Antiguidade'] == faixa_atual].copy()
             if not filtered_df.empty:
                 def highlight_row(row):
-                    return ['background-color: #fff8c4'] * len(row) if row['Contato'] else [''] * len(row)
+                    # Checar se a coluna 'Contato' existe antes de acessá-la
+                    return ['background-color: #fff8c4'] * len(row) if row.get('Contato', False) else [''] * len(row)
+
                 filtered_df['Contato'] = filtered_df['ID do ticket'].apply(lambda id: str(id) in st.session_state.contacted_tickets)
                 filtered_df['Observações'] = filtered_df['ID do ticket'].apply(lambda id: st.session_state.observations.get(str(id), ''))
                 st.session_state.last_filtered_df = filtered_df.reset_index(drop=True)
+                
+                # Definir colunas DEPOIS de adicionar Contato/Observações
                 colunas_para_exibir_renomeadas = {
                     'Contato': 'Contato', 'ID do ticket': 'ID do ticket', 'Descrição': 'Descrição',
                     'Atribuir a um grupo': 'Grupo Atribuído', 'Dias em Aberto': 'Dias em Aberto',
                     'Data de criação': 'Data de criação', 'Observações': 'Observações'
                 }
+                # Garantir que a coluna 'Data de criação' existe antes de tentar renomear
+                if 'Data de Criacao' in st.session_state.last_filtered_df.columns and 'Data de criação' not in st.session_state.last_filtered_df.columns:
+                     colunas_para_exibir_renomeadas['Data de Criacao'] = 'Data de criação'
+                     del colunas_para_exibir_renomeadas['Data de criação'] # Remover a chave antiga se a nova foi adicionada
+
+                # Filtrar colunas que realmente existem e na ordem desejada
+                colunas_a_exibir_final = [colunas_para_exibir_renomeadas[orig_col]
+                                           for orig_col in colunas_para_exibir_renomeadas
+                                           if orig_col in st.session_state.last_filtered_df.columns]
+                colunas_desabilitadas_final = [col for col in ['ID do ticket', 'Descrição', 'Grupo Atribuído', 'Dias em Aberto', 'Data de criação'] if col in colunas_a_exibir_final]
+
+
                 st.data_editor(
-                    st.session_state.last_filtered_df.rename(columns=colunas_para_exibir_renomeadas)[list(colunas_para_exibir_renomeadas.values())].style.apply(highlight_row, axis=1),
+                    st.session_state.last_filtered_df.rename(columns=colunas_para_exibir_renomeadas)[colunas_a_exibir_final].style.apply(highlight_row, axis=1),
                     width='stretch', hide_index=True,
-                    disabled=['ID do ticket', 'Descrição', 'Grupo Atribuído', 'Dias em Aberto', 'Data de criação'],
+                    disabled=colunas_desabilitadas_final,
                     key='ticket_editor', on_change=sync_ticket_data
                 )
             else:
@@ -1181,20 +1312,30 @@ try:
             grupo_selecionado = st.selectbox("Busca de chamados por grupo:", options=lista_grupos)
             if grupo_selecionado:
                 resultados_busca = df_aging[df_aging['Atribuir a um grupo'] == grupo_selecionado].copy()
-                if 'Data de criação' in resultados_busca.columns:
-                    resultados_busca['Data de criação'] = resultados_busca['Data de criação'].dt.strftime('%d/%m/%Y')
+                
+                # Formatar Data de criação se existir
+                date_col_busca = next((col for col in ['Data de criação', 'Data de Criacao'] if col in resultados_busca.columns), None)
+                if date_col_busca:
+                     # Garantir que é datetime antes de formatar
+                     if pd.api.types.is_datetime64_any_dtype(resultados_busca[date_col_busca]):
+                          resultados_busca[date_col_busca] = resultados_busca[date_col_busca].dt.strftime('%d/%m/%Y')
+                     else: # Tentar converter se não for datetime
+                          resultados_busca[date_col_busca] = pd.to_datetime(resultados_busca[date_col_busca], errors='coerce').dt.strftime('%d/%m/%Y')
+
+
                 st.write(f"Encontrados {len(resultados_busca)} chamados para o grupo '{grupo_selecionado}':")
-                colunas_para_exibir_busca = ['ID do ticket', 'Descrição', 'Dias em Aberto', 'Data de criação']
-                st.data_editor(resultados_busca[[col for col in colunas_para_exibir_busca if col in resultados_busca.columns]], width='stretch', hide_index=True, disabled=True)
+                colunas_para_exibir_busca = ['ID do ticket', 'Descrição', 'Dias em Aberto', date_col_busca if date_col_busca else 'Data de criação'] # Usar nome correto da coluna
+                # Filtrar colunas que realmente existem
+                colunas_para_exibir_busca_exist = [col for col in colunas_para_exibir_busca if col in resultados_busca.columns]
+                st.data_editor(resultados_busca[colunas_para_exibir_busca_exist], width='stretch', hide_index=True, disabled=True)
 
     with tab2:
         st.subheader("Baixar Relatório em Formato Email (.eml)")
-        st.markdown("Este recurso compila os principais indicadores e gráficos do dashboard em um **arquivo `.eml`**. Abra este arquivo com seu programa de email (Outlook, etc.) para visualizá-lo como um email formatado.")
+        st.markdown("Este recurso compila os principais indicadores e gráficos (como tabelas) do dashboard em um **arquivo `.eml`**. Abra este arquivo com seu programa de email (Outlook, etc.) para visualizá-lo como um email formatado.")
 
         if st.button("Gerar e Baixar Arquivo .eml", width='stretch'):
             with st.spinner("Gerando o arquivo do relatório..."):
                 try:
-                    # Gerar conteúdo HTML e imagens
                     email_html, imagens_anexas = gerar_conteudo_email_html(
                         fig_composicao_grupo=fig_stacked_bar_para_relatorio,
                         total_aberto=total_chamados,
@@ -1212,7 +1353,6 @@ try:
                         fig_evol_7_dias=fig_aging_all
                     )
 
-                    # Criar o arquivo .eml em memória
                     assunto_email = f"Relatório Backlog Copa Energia + Belago - {data_atual_str}"
                     eml_file_buffer = gerar_arquivo_eml(assunto_email, email_html, imagens_anexas)
 
@@ -1222,10 +1362,9 @@ try:
                             label="Baixar Relatório (.eml)",
                             data=eml_file_buffer,
                             file_name=f"relatorio_backlog_{date.today().strftime('%Y-%m-%d')}.eml",
-                            mime="message/rfc822", # Mime type para arquivos .eml
+                            mime="message/rfc822",
                             key="download_eml_report"
                         )
-                    # Se gerar_arquivo_eml retornar None, um erro já foi mostrado dentro da função
 
                 except Exception as e:
                     st.error(f"Erro inesperado durante a geração do arquivo .eml: {e}")
@@ -1426,6 +1565,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.30-745 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.30-746 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
