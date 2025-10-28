@@ -717,7 +717,7 @@ def img_to_bytes(img):
     img_buffer.seek(0)
     return img_buffer.getvalue()
 
-# --- Função para Gerar Conteúdo HTML (com Tabelas - v747) ---
+# --- Função para Gerar Conteúdo HTML (com Tabelas - v748 - Formato Longo) ---
 def gerar_conteudo_email_html(
     fig_composicao_grupo,
     total_aberto, total_fechados, data_atual, hora_atual,
@@ -728,8 +728,8 @@ def gerar_conteudo_email_html(
     fig_evol_7_dias
 ):
     """
-    (v747) Gera o corpo HTML do email/eml e os dados das imagens para anexar.
-    Usa TABELAS HTML para representar os gráficos Plotly, com tratamento aprimorado para dados ausentes.
+    (v748) Gera o corpo HTML do email/eml e os dados das imagens para anexar.
+    Usa TABELAS HTML (formato longo: Eixo X, Série, Valor) para representar os gráficos.
     """
 
     html_parts = []
@@ -738,8 +738,8 @@ def gerar_conteudo_email_html(
     # --- Cabeçalho ---
     html_parts.append("<html><head><style>")
     html_parts.append("""
-        .email-table { border-collapse: collapse; width: 90%; margin: 20px auto; font-family: sans-serif; font-size: 0.9em;}
-        .email-table th, .email-table td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+        .email-table { border-collapse: collapse; width: 80%; margin: 20px auto; font-family: sans-serif; font-size: 0.85em;} /* Diminuido width e font */
+        .email-table th, .email-table td { border: 1px solid #ddd; padding: 5px; text-align: left; } /* Diminuido padding */
         .email-table th { background-color: #f2f2f2; font-weight: bold; }
         .email-h2 { font-family: sans-serif; color: #333; text-align: center; margin-top: 30px; margin-bottom: 10px; }
         .email-center { text-align: center; margin: 20px 0; }
@@ -769,7 +769,7 @@ def gerar_conteudo_email_html(
     except Exception as e:
         html_parts.append(f"<p style='color:red; text-align:center;'>Erro ao gerar KPIs de antiguidade: {e}</p>")
 
-    # --- Gráficos (Como Tabelas HTML - Lógica Aprimorada) ---
+    # --- Gráficos (Como Tabelas HTML - Formato Longo) ---
     graph_configs = [
         ("Composição da Idade do Backlog por Grupo", fig_composicao_grupo),
         ("Evolução do Total Geral", fig_evol_geral),
@@ -779,94 +779,94 @@ def gerar_conteudo_email_html(
 
     for title, fig in graph_configs:
         html_parts.append(f"<h2 class='email-h2'>{title}</h2>")
-        df_graph_final = pd.DataFrame() # DataFrame final para este gráfico
+        df_graph_long = pd.DataFrame() # DataFrame final em formato longo
 
         if fig and fig.data:
             try:
-                # 1. Encontrar todos os valores únicos do eixo X e o nome do eixo X
-                all_x_values = set()
+                # 1. Identificar nome do eixo X
                 x_axis_name = "Eixo X" # Nome padrão
                 if fig.layout and fig.layout.xaxis and fig.layout.xaxis.title and fig.layout.xaxis.title.text:
                     x_axis_name = fig.layout.xaxis.title.text if fig.layout.xaxis.title.text else x_axis_name
-                elif len(fig.data) > 0 and hasattr(fig.data[0], 'x') and isinstance(fig.data[0].x, (list, tuple, pd.Series, np.ndarray)):
-                     if isinstance(fig.data[0].x, pd.Series) and fig.data[0].x.name:
-                          x_axis_name = fig.data[0].x.name
+                elif len(fig.data) > 0 and hasattr(fig.data[0], 'x') and isinstance(fig.data[0].x, pd.Series) and fig.data[0].x.name:
+                     x_axis_name = fig.data[0].x.name
 
-
-                for trace in fig.data:
-                    if hasattr(trace, 'x') and trace.x is not None:
-                         try:
-                              all_x_values.update(list(trace.x))
-                         except TypeError:
-                              all_x_values.add(trace.x)
-
-
-                if not all_x_values:
-                    # Não mostrar warning aqui, apenas a mensagem no HTML
-                    # st.warning(f"Não foi possível encontrar valores para o eixo X em '{title}'.")
-                    html_parts.append(f"<p style='text-align:center; color:orange;'>[Não foi possível extrair dados do eixo X para este gráfico]</p>")
-                    continue
-
-                x_values_list = list(all_x_values)
-                try:
-                    x_values_list_sorted = sorted(x_values_list, key=float)
-                except (ValueError, TypeError):
-                    try:
-                       x_values_list_sorted = sorted(x_values_list, key=lambda d: datetime.strptime(str(d).split(' ')[0], '%d/%m')) # Convertido para str
-                    except (ValueError, TypeError):
-                       x_values_list_sorted = sorted(x_values_list)
-
-                # 2. Criar DataFrame base com o eixo X ordenado
-                df_graph_final = pd.DataFrame({x_axis_name: x_values_list_sorted})
-
-                # 3. Para cada trace, criar uma série e fazer merge
+                # 2. Iterar sobre as traces e construir lista de dicionários
+                data_list = []
                 for i, trace in enumerate(fig.data):
-                    col_name = trace.name if trace.name else f"Série {i+1}"
+                    series_name = trace.name if trace.name else f"Série {i+1}"
                     if hasattr(trace, 'x') and hasattr(trace, 'y') and \
                        trace.x is not None and trace.y is not None:
                         try:
-                            trace_x = list(trace.x) if isinstance(trace.x, (tuple, np.ndarray, pd.Series)) else [trace.x] * len(trace.y) if not isinstance(trace.x, list) else trace.x
-                            trace_y = list(trace.y) if isinstance(trace.y, (tuple, np.ndarray, pd.Series)) else trace.y
+                            # Garantir que x e y sejam iteráveis e tenham mesmo tamanho
+                            trace_x = list(trace.x) if isinstance(trace.x, (list, tuple, np.ndarray, pd.Series)) else [trace.x] * len(trace.y) if not isinstance(trace.x, (list, tuple)) and hasattr(trace, 'y') and hasattr(trace.y, '__len__') else []
+                            trace_y = list(trace.y) if isinstance(trace.y, (list, tuple, np.ndarray, pd.Series)) else []
 
                             if len(trace_x) == len(trace_y):
-                                df_trace = pd.DataFrame({x_axis_name: trace_x, col_name: trace_y})
-                                df_trace = df_trace.groupby(x_axis_name, as_index=False).sum()
-                                df_graph_final = pd.merge(df_graph_final, df_trace, on=x_axis_name, how='left')
-                            # else:
-                                # Não mostrar warning aqui para não poluir logs
-                                # st.warning(f"Trace '{col_name}' em '{title}' tem tamanhos inconsistentes de x ({len(trace_x)}) e y ({len(trace_y)}).")
-                        except Exception as trace_err:
-                             # st.warning(f"Erro ao processar trace '{col_name}' em '{title}': {trace_err}")
-                             pass # Silenciar erro de processamento de trace individual
+                                for x_val, y_val in zip(trace_x, trace_y):
+                                    data_list.append({
+                                        x_axis_name: x_val,
+                                        "Série": series_name,
+                                        "Valor": y_val
+                                    })
+                            # else: # Silenciar warnings de inconsistência aqui
+                            #    pass
+                        except Exception: # Silenciar erros de processamento de trace individual
+                            pass
 
-                # 4. Preencher NaNs com 0
-                numeric_cols = df_graph_final.select_dtypes(include=np.number).columns
-                df_graph_final[numeric_cols] = df_graph_final[numeric_cols].fillna(0).astype(int) # Converter para int após preencher
-                non_numeric_cols = df_graph_final.select_dtypes(exclude=np.number).columns.drop(x_axis_name, errors='ignore')
-                df_graph_final[non_numeric_cols] = df_graph_final[non_numeric_cols].fillna('')
+                if data_list:
+                    df_graph_long = pd.DataFrame(data_list)
+                    # Tentar ordenar pelo eixo X (importante para evolução)
+                    try:
+                       # Tentar converter X para numérico ou data para ordenar corretamente
+                       df_graph_long['_sort_key'] = pd.to_numeric(df_graph_long[x_axis_name], errors='coerce')
+                       if df_graph_long['_sort_key'].isna().all(): # Se falhou, tentar como data (DD/MM)
+                            df_graph_long['_sort_key'] = pd.to_datetime(df_graph_long[x_axis_name].astype(str).str.split(' ').str[0], format='%d/%m', errors='coerce')
+                       
+                       # Se conseguiu converter, ordena, senão usa a ordem original
+                       if not df_graph_long['_sort_key'].isna().all():
+                           df_graph_long = df_graph_long.sort_values(by=['_sort_key', 'Série']).drop(columns=['_sort_key'])
+                       else:
+                            df_graph_long = df_graph_long.drop(columns=['_sort_key']) # Remove se não serviu
+
+                    except Exception: # Se qualquer ordenação falhar, usa a ordem original
+                       if '_sort_key' in df_graph_long.columns:
+                            df_graph_long = df_graph_long.drop(columns=['_sort_key'])
 
 
             except Exception as e:
-                # st.warning(f"Falha ao gerar tabela HTML para '{title}': {e}") # Silenciar warning geral
+                # st.warning(f"Falha ao extrair dados para tabela HTML de '{title}': {e}") # Silenciar
                 html_parts.append(f"<p style='text-align:center; color:orange;'>[Visualização tabular indisponível - Falha na extração de dados: {e}]</p>")
-                df_graph_final = pd.DataFrame()
+                df_graph_long = pd.DataFrame() # Resetar em caso de erro
 
-        # 5. Converter DataFrame final para HTML (se não estiver vazio)
-        if not df_graph_final.empty:
+        # 3. Converter DataFrame final (formato longo) para HTML
+        if not df_graph_long.empty:
             try:
-                if len(df_graph_final) > 50:
-                    html_parts.append(f"<p style='text-align:center; font-size:0.8em;'>(Tabela truncada em 50 linhas)</p>")
-                    df_graph_final_display = df_graph_final.head(50)
+                if len(df_graph_long) > 100: # Aumentar limite para formato longo
+                    html_parts.append(f"<p style='text-align:center; font-size:0.8em;'>(Tabela truncada em 100 linhas)</p>")
+                    df_graph_long_display = df_graph_long.head(100)
                 else:
-                     df_graph_final_display = df_graph_final
+                     df_graph_long_display = df_graph_long
+                
+                # Formatar datas se houver coluna datetime (embora o X já deva ser string)
+                for col in df_graph_long_display.select_dtypes(include=['datetime64[ns]']).columns:
+                     df_graph_long_display[col] = df_graph_long_display[col].dt.strftime('%d/%m/%Y')
+                     
+                # Converter valores numéricos para inteiros se possível
+                if 'Valor' in df_graph_long_display.columns:
+                     # Tenta converter para Int64 que aceita NA, depois para string
+                     try:
+                          df_graph_long_display['Valor'] = df_graph_long_display['Valor'].astype('float').astype('Int64').astype(str).replace('<NA>', '')
+                     except Exception: # Se falhar, apenas converte para string
+                          df_graph_long_display['Valor'] = df_graph_long_display['Valor'].astype(str)
 
-                html_table = df_graph_final_display.to_html(classes='email-table', index=False, border=0, justify='center')
+
+                html_table = df_graph_long_display.to_html(classes='email-table', index=False, border=0, justify='left') # Justificar à esquerda
                 html_parts.append(html_table)
             except Exception as html_err:
-                # st.warning(f"Erro ao converter dados finais de '{title}' para HTML: {html_err}") # Silenciar warning
-                html_parts.append(f"<p style='text-align:center; color:red;'>[Erro ao gerar tabela para este gráfico]</p>")
+                # st.warning(f"Erro ao converter dados finais de '{title}' para HTML: {html_err}") # Silenciar
+                html_parts.append(f"<p style='text-align:center; color:red;'>[Erro ao gerar tabela para este gráfico: {html_err}]</p>")
         elif fig and fig.data:
-             pass
+             pass # Mensagem de erro já foi adicionada
         else:
             html_parts.append("<p style='text-align:center; color:grey;'>[Gráfico indisponível (sem dados históricos)]</p>")
 
@@ -891,6 +891,7 @@ def gerar_conteudo_email_html(
 
 # --- Função para Gerar Arquivo .eml (sem mudanças) ---
 def gerar_arquivo_eml(subject, html_body, images_to_attach):
+    # ... (sem mudanças) ...
     """Cria o conteúdo de um arquivo .eml como bytes."""
     try:
         message = MIMEMultipart('related')
