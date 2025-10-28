@@ -1,4 +1,4 @@
-# VERSÃO v0.9.30-742
+# VERSÃO v0.9.30-743
 
 import streamlit as st
 import pandas as pd
@@ -996,7 +996,7 @@ try:
             )
             fig_total_evolucao.update_layout(height=400)
 
-            df_evolucao_tab3_sorted = df_evolucao_tab3.sort_values('Data')
+            df_evolucao_tab3_sorted = df_evolucao_tab3.sort_values('Data').copy() # Correção SettingWithCopyWarning
             df_evolucao_tab3_sorted['Data (Eixo)'] = df_evolucao_tab3_sorted['Data'].dt.strftime('%d/%m')
             ordem_datas_grupo = df_evolucao_tab3_sorted['Data (Eixo)'].unique().tolist()
             df_filtrado_display = df_evolucao_tab3_sorted.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
@@ -1056,7 +1056,7 @@ try:
             df_filtrado_grafico = df_combinado[df_combinado['data'].dt.date >= data_inicio_filtro_grafico].copy()
 
             if not df_filtrado_grafico.empty:
-                df_grafico = df_filtrado_grafico.sort_values(by='data')
+                df_grafico = df_filtrado_grafico.sort_values(by='data').copy() # Correção SettingWithCopyWarning
                 df_grafico['Data (Eixo)'] = df_grafico['data'].dt.strftime('%d/%m')
                 ordem_datas_grafico = df_grafico['Data (Eixo)'].unique().tolist()
                 
@@ -1110,14 +1110,14 @@ try:
         df_comparativo['Status'] = df_comparativo.apply(get_status, axis=1)
         df_comparativo.rename(columns={'Atribuir a um grupo': 'Grupo'}, inplace=True)
         df_comparativo = df_comparativo[['Grupo', '15 Dias Atrás', 'Atual', 'Diferença', 'Status']]
-        st.dataframe(df_comparativo.set_index('Grupo').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), use_container_width=True)
+        st.dataframe(df_comparativo.set_index('Grupo').style.map(lambda val: 'background-color: #ffcccc' if val > 0 else ('background-color: #ccffcc' if val < 0 else 'background-color: white'), subset=['Diferença']), width='stretch')
         st.markdown("---")
         st.markdown(f"<h3>Chamados Encerrados no Dia <span style='font-size: 0.6em; color: #666; font-weight: normal;'>({data_atual_str})</span></h3>", unsafe_allow_html=True)
 
         if df_fechados.empty:
             st.info("O arquivo de chamados encerrados ainda não foi carregado.")
         elif not df_encerrados_filtrado.empty:
-            st.data_editor(df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']], hide_index=True, disabled=True, use_container_width=True)
+            st.data_editor(df_encerrados_filtrado[['ID do ticket', 'Descrição', 'Atribuir a um grupo']], hide_index=True, disabled=True, width='stretch')
         else:
             st.info("O arquivo de chamados encerrados do dia ainda não foi carregado.")
 
@@ -1147,7 +1147,7 @@ try:
                 }
                 st.data_editor(
                     st.session_state.last_filtered_df.rename(columns=colunas_para_exibir_renomeadas)[list(colunas_para_exibir_renomeadas.values())].style.apply(highlight_row, axis=1),
-                    use_container_width=True, hide_index=True,
+                    width='stretch', hide_index=True,
                     disabled=['ID do ticket', 'Descrição', 'Grupo Atribuído', 'Dias em Aberto', 'Data de criação'],
                     key='ticket_editor', on_change=sync_ticket_data
                 )
@@ -1162,13 +1162,13 @@ try:
                     resultados_busca['Data de criação'] = resultados_busca['Data de criação'].dt.strftime('%d/%m/%Y')
                 st.write(f"Encontrados {len(resultados_busca)} chamados para o grupo '{grupo_selecionado}':")
                 colunas_para_exibir_busca = ['ID do ticket', 'Descrição', 'Dias em Aberto', 'Data de criação']
-                st.data_editor(resultados_busca[[col for col in colunas_para_exibir_busca if col in resultados_busca.columns]], use_container_width=True, hide_index=True, disabled=True)
+                st.data_editor(resultados_busca[[col for col in colunas_para_exibir_busca if col in resultados_busca.columns]], width='stretch', hide_index=True, disabled=True)
 
     with tab2:
         st.subheader("Gerar Relatório Unificado em PNG")
         st.markdown("Este recurso compila os principais indicadores e gráficos do dashboard em uma **única imagem PNG** para fácil compartilhamento.")
         
-        if st.button("Gerar Relatório PNG de 1 Página", use_container_width=True):
+        if st.button("Gerar Relatório PNG de 1 Página", width='stretch'):
             with st.spinner("Gerando seu relatório... isso pode levar alguns segundos..."):
                 try:
                     report_png_buffer = gerar_relatorio_png(
@@ -1270,10 +1270,12 @@ try:
                 st.plotly_chart(fig_total_evolucao_slider, use_container_width=True)
                 st.markdown("---")
                 st.info("Esta visualização já filtra os chamados fechados e permite filtrar grupos clicando 2x na legenda.")
-                df_evolucao_tab3_sorted = df_evolucao_tab3_slider.sort_values('Data')
+                
+                df_evolucao_tab3_sorted = df_evolucao_tab3_slider.sort_values('Data').copy() # Correção SettingWithCopyWarning
                 df_evolucao_tab3_sorted['Data (Eixo)'] = df_evolucao_tab3_sorted['Data'].dt.strftime('%d/%m')
                 ordem_datas_grupo = df_evolucao_tab3_sorted['Data (Eixo)'].unique().tolist()
                 df_filtrado_display = df_evolucao_tab3_sorted.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
+                
                 fig_evolucao_grupo_slider = px.line(
                     df_filtrado_display, x='Data (Eixo)', y='Total Chamados', color='Grupo Atribuído',
                     title='Evolução por Grupo (Apenas Dias de Semana)',
@@ -1350,7 +1352,7 @@ try:
             if df_filtrado_grafico.empty:
                 st.warning("Não há dados para o período selecionado.")
             else:
-                df_grafico = df_filtrado_grafico.sort_values(by='data')
+                df_grafico = df_filtrado_grafico.sort_values(by='data').copy() # Correção SettingWithCopyWarning
                 df_grafico['Data (Eixo)'] = df_grafico['data'].dt.strftime('%d/%m')
                 ordem_datas_grafico = df_grafico['Data (Eixo)'].unique().tolist()
                 base_color_aging = "#375623"
@@ -1389,6 +1391,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.30-742 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.30-743 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
