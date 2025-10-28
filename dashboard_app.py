@@ -1,4 +1,4 @@
-# VERSÃO v0.9.30-746 (Relatório .eml com Tabelas + Dias Aberto Fechados)
+# VERSÃO v0.9.30-747 (Relatório .eml com Tabelas Corrigidas)
 
 import streamlit as st
 import pandas as pd
@@ -290,26 +290,23 @@ def analisar_aging(_df_atual):
     df[date_col_name] = pd.to_datetime(df[date_col_name], errors='coerce')
     linhas_invalidas = df[df[date_col_name].isna()]
     if not linhas_invalidas.empty:
-        # Só mostra o expander se realmente tiver linhas inválidas
-        # E se a coluna de data existir (para evitar erro no dropna)
         if date_col_name in df.columns:
             with st.expander(f"⚠️ Atenção: {len(linhas_invalidas)} chamados foram descartados da análise de aging por data inválida ou vazia."):
                 st.dataframe(linhas_invalidas[[c for c in ['ID do ticket', date_col_name] if c in linhas_invalidas.columns]].head())
             df.dropna(subset=[date_col_name], inplace=True)
-        else: # Se a coluna de data nem existe, não podemos calcular
+        else:
              df['Dias em Aberto'] = pd.NA
              df['Faixa de Antiguidade'] = "Erro de Data"
              return df
 
 
     hoje = pd.to_datetime('today').normalize()
-    # Certifique-se que a coluna existe e é datetime antes de calcular
     if date_col_name in df.columns and pd.api.types.is_datetime64_any_dtype(df[date_col_name]):
         data_criacao_normalizada = df[date_col_name].dt.normalize()
         dias_calculados = (hoje - data_criacao_normalizada).dt.days
         df['Dias em Aberto'] = (dias_calculados - 1).clip(lower=0)
         df['Faixa de Antiguidade'] = categorizar_idade_vetorizado(df['Dias em Aberto'])
-    else: # Fallback se algo der errado
+    else:
         df['Dias em Aberto'] = pd.NA
         df['Faixa de Antiguidade'] = "Erro de Cálculo"
 
@@ -336,9 +333,8 @@ def sync_ticket_data():
     observation_changed = False
     for row_index, changes in edited_rows.items():
         try:
-            # Usar .get para evitar KeyError se a coluna não existir temporariamente
             ticket_id = st.session_state.last_filtered_df.iloc[row_index].get('ID do ticket')
-            if ticket_id is None: continue # Pula linha se ID não for encontrado
+            if ticket_id is None: continue
             ticket_id = str(ticket_id)
 
             if 'Contato' in changes:
@@ -374,7 +370,6 @@ def sync_ticket_data():
             commit_msg = f"Atualizando observações em {now_str}"
             update_github_file(st.session_state.repo, "ticket_observations.json", json_content.encode('utf-8'), commit_msg)
 
-    # Limpar edições pendentes SOMENTE se a sincronização foi bem-sucedida (ou não necessária)
     if 'ticket_editor' in st.session_state:
         st.session_state.ticket_editor['edited_rows'] = {}
     st.session_state.scroll_to_details = True
@@ -722,7 +717,7 @@ def img_to_bytes(img):
     img_buffer.seek(0)
     return img_buffer.getvalue()
 
-# --- Função para Gerar Conteúdo HTML (com Tabelas) ---
+# --- Função para Gerar Conteúdo HTML (com Tabelas - v747) ---
 def gerar_conteudo_email_html(
     fig_composicao_grupo,
     total_aberto, total_fechados, data_atual, hora_atual,
@@ -733,10 +728,10 @@ def gerar_conteudo_email_html(
     fig_evol_7_dias
 ):
     """
-    (v746) Gera o corpo HTML do email/eml e os dados das imagens para anexar.
-    Usa TABELAS HTML para representar os gráficos Plotly.
+    (v747) Gera o corpo HTML do email/eml e os dados das imagens para anexar.
+    Usa TABELAS HTML para representar os gráficos Plotly, com tratamento aprimorado para dados ausentes.
     """
-    
+
     html_parts = []
     images_to_attach = {} # Dicionário { 'cid': image_bytes }
 
@@ -774,7 +769,7 @@ def gerar_conteudo_email_html(
     except Exception as e:
         html_parts.append(f"<p style='color:red; text-align:center;'>Erro ao gerar KPIs de antiguidade: {e}</p>")
 
-    # --- Gráficos (Como Tabelas HTML) ---
+    # --- Gráficos (Como Tabelas HTML - Lógica Aprimorada) ---
     graph_configs = [
         ("Composição da Idade do Backlog por Grupo", fig_composicao_grupo),
         ("Evolução do Total Geral", fig_evol_geral),
@@ -784,69 +779,97 @@ def gerar_conteudo_email_html(
 
     for title, fig in graph_configs:
         html_parts.append(f"<h2 class='email-h2'>{title}</h2>")
+        df_graph_final = pd.DataFrame() # DataFrame final para este gráfico
+
         if fig and fig.data:
             try:
-                all_data = []
-                if isinstance(fig.data[0], go.Bar) or isinstance(fig.data[0], go.Scatter) or isinstance(fig.data[0], go.Area):
-                     if len(fig.data) == 1:
-                         trace = fig.data[0]
-                         # Verificar se x e y não são None e têm o mesmo comprimento
-                         if trace.x is not None and trace.y is not None and len(trace.x) == len(trace.y):
-                             df_graph = pd.DataFrame({'Eixo X': trace.x, 'Valor': trace.y})
-                             all_data.append(df_graph)
-                         else:
-                             st.warning(f"Dados inconsistentes (x/y) encontrados na trace para '{title}'")
-                     else:
-                         temp_dfs = []
-                         base_x = fig.data[0].x # Assume que todos têm o mesmo eixo X
-                         if base_x is None:
-                              st.warning(f"Eixo X não encontrado na primeira trace para '{title}'")
-                              continue # Pula este gráfico se o eixo X base for None
+                # 1. Encontrar todos os valores únicos do eixo X e o nome do eixo X
+                all_x_values = set()
+                x_axis_name = "Eixo X" # Nome padrão
+                if fig.layout and fig.layout.xaxis and fig.layout.xaxis.title and fig.layout.xaxis.title.text:
+                    x_axis_name = fig.layout.xaxis.title.text if fig.layout.xaxis.title.text else x_axis_name
+                elif len(fig.data) > 0 and hasattr(fig.data[0], 'x') and isinstance(fig.data[0].x, (list, tuple, pd.Series, np.ndarray)):
+                     if isinstance(fig.data[0].x, pd.Series) and fig.data[0].x.name:
+                          x_axis_name = fig.data[0].x.name
 
-                         df_base = pd.DataFrame({'Eixo X': base_x})
 
-                         for trace in fig.data:
-                              if trace.y is not None and len(base_x) == len(trace.y):
-                                   # Usar o nome da trace como nome da coluna, fallback se não houver nome
-                                   col_name = trace.name if trace.name else f"Trace_{len(temp_dfs)+1}"
-                                   df_trace = pd.DataFrame({col_name: trace.y})
-                                   temp_dfs.append(df_trace)
-                              else:
-                                   st.warning(f"Trace '{trace.name}' em '{title}' tem dados y inconsistentes ou ausentes.")
+                for trace in fig.data:
+                    if hasattr(trace, 'x') and trace.x is not None:
+                         try:
+                              all_x_values.update(list(trace.x))
+                         except TypeError:
+                              all_x_values.add(trace.x)
 
-                         if temp_dfs:
-                              df_graph = pd.concat([df_base] + temp_dfs, axis=1)
-                              all_data.append(df_graph)
 
-                if not all_data:
-                     html_parts.append(f"<p style='text-align:center; color:orange;'>[Não foi possível extrair dados tabulares para este gráfico]</p>")
-                else:
-                    for i, df_data in enumerate(all_data):
-                        if df_data.empty: continue # Pula se o dataframe estiver vazio
+                if not all_x_values:
+                    # Não mostrar warning aqui, apenas a mensagem no HTML
+                    # st.warning(f"Não foi possível encontrar valores para o eixo X em '{title}'.")
+                    html_parts.append(f"<p style='text-align:center; color:orange;'>[Não foi possível extrair dados do eixo X para este gráfico]</p>")
+                    continue
 
-                        if len(df_data) > 50:
-                             html_parts.append(f"<p style='text-align:center; font-size:0.8em;'>(Tabela truncada em 50 linhas)</p>")
-                             df_data = df_data.head(50)
-                        
-                        if 'customdata' in df_data.columns: df_data = df_data.drop(columns=['customdata'])
-                        if 'hovertext' in df_data.columns: df_data = df_data.drop(columns=['hovertext'])
+                x_values_list = list(all_x_values)
+                try:
+                    x_values_list_sorted = sorted(x_values_list, key=float)
+                except (ValueError, TypeError):
+                    try:
+                       x_values_list_sorted = sorted(x_values_list, key=lambda d: datetime.strptime(str(d).split(' ')[0], '%d/%m')) # Convertido para str
+                    except (ValueError, TypeError):
+                       x_values_list_sorted = sorted(x_values_list)
 
-                        # Tentar converter datetime para string antes de gerar HTML
-                        for col in df_data.select_dtypes(include=['datetime64[ns]']).columns:
-                             df_data[col] = df_data[col].dt.strftime('%d/%m/%Y')
+                # 2. Criar DataFrame base com o eixo X ordenado
+                df_graph_final = pd.DataFrame({x_axis_name: x_values_list_sorted})
 
+                # 3. Para cada trace, criar uma série e fazer merge
+                for i, trace in enumerate(fig.data):
+                    col_name = trace.name if trace.name else f"Série {i+1}"
+                    if hasattr(trace, 'x') and hasattr(trace, 'y') and \
+                       trace.x is not None and trace.y is not None:
                         try:
-                           html_table = df_data.to_html(classes='email-table', index=False, border=0, justify='center')
-                           html_parts.append(html_table)
-                        except Exception as html_err:
-                           st.warning(f"Erro ao converter dados de '{title}' para HTML: {html_err}")
-                           html_parts.append(f"<p style='text-align:center; color:red;'>[Erro ao gerar tabela para este gráfico]</p>")
+                            trace_x = list(trace.x) if isinstance(trace.x, (tuple, np.ndarray, pd.Series)) else [trace.x] * len(trace.y) if not isinstance(trace.x, list) else trace.x
+                            trace_y = list(trace.y) if isinstance(trace.y, (tuple, np.ndarray, pd.Series)) else trace.y
+
+                            if len(trace_x) == len(trace_y):
+                                df_trace = pd.DataFrame({x_axis_name: trace_x, col_name: trace_y})
+                                df_trace = df_trace.groupby(x_axis_name, as_index=False).sum()
+                                df_graph_final = pd.merge(df_graph_final, df_trace, on=x_axis_name, how='left')
+                            # else:
+                                # Não mostrar warning aqui para não poluir logs
+                                # st.warning(f"Trace '{col_name}' em '{title}' tem tamanhos inconsistentes de x ({len(trace_x)}) e y ({len(trace_y)}).")
+                        except Exception as trace_err:
+                             # st.warning(f"Erro ao processar trace '{col_name}' em '{title}': {trace_err}")
+                             pass # Silenciar erro de processamento de trace individual
+
+                # 4. Preencher NaNs com 0
+                numeric_cols = df_graph_final.select_dtypes(include=np.number).columns
+                df_graph_final[numeric_cols] = df_graph_final[numeric_cols].fillna(0).astype(int) # Converter para int após preencher
+                non_numeric_cols = df_graph_final.select_dtypes(exclude=np.number).columns.drop(x_axis_name, errors='ignore')
+                df_graph_final[non_numeric_cols] = df_graph_final[non_numeric_cols].fillna('')
+
 
             except Exception as e:
-                st.warning(f"Falha ao gerar tabela HTML para '{title}': {e}")
+                # st.warning(f"Falha ao gerar tabela HTML para '{title}': {e}") # Silenciar warning geral
                 html_parts.append(f"<p style='text-align:center; color:orange;'>[Visualização tabular indisponível - Falha na extração de dados: {e}]</p>")
+                df_graph_final = pd.DataFrame()
+
+        # 5. Converter DataFrame final para HTML (se não estiver vazio)
+        if not df_graph_final.empty:
+            try:
+                if len(df_graph_final) > 50:
+                    html_parts.append(f"<p style='text-align:center; font-size:0.8em;'>(Tabela truncada em 50 linhas)</p>")
+                    df_graph_final_display = df_graph_final.head(50)
+                else:
+                     df_graph_final_display = df_graph_final
+
+                html_table = df_graph_final_display.to_html(classes='email-table', index=False, border=0, justify='center')
+                html_parts.append(html_table)
+            except Exception as html_err:
+                # st.warning(f"Erro ao converter dados finais de '{title}' para HTML: {html_err}") # Silenciar warning
+                html_parts.append(f"<p style='text-align:center; color:red;'>[Erro ao gerar tabela para este gráfico]</p>")
+        elif fig and fig.data:
+             pass
         else:
             html_parts.append("<p style='text-align:center; color:grey;'>[Gráfico indisponível (sem dados históricos)]</p>")
+
 
     # --- Comparativo de Aging (Imagem) ---
     html_parts.append("<h2 class='email-h2'>Comparativo de Antiguidade (Hoje vs. 7 dias)</h2>")
@@ -1019,13 +1042,14 @@ try:
             df_fechados[id_col_name] = df_fechados[id_col_name].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
             closed_ticket_ids = df_fechados[id_col_name].dropna().unique()
 
-    df_encerrados = df_atual[df_atual['ID do ticket'].isin(closed_ticket_ids)].copy() # Adicionado .copy()
+    df_encerrados = df_atual[df_atual['ID do ticket'].isin(closed_ticket_ids)].copy()
     df_abertos = df_atual[~df_atual['ID do ticket'].isin(closed_ticket_ids)]
     df_atual_filtrado = df_abertos[~df_abertos['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     df_15dias_filtrado = df_15dias[~df_15dias['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     df_aging = analisar_aging(df_atual_filtrado)
-    df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)].copy() # Adicionado .copy()
+    df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)].copy()
 
+    
     # --- Pré-cálculo dos dados e gráficos (sem mudanças) ---
     total_chamados = len(df_aging) if not df_aging.empty else 0
     total_fechados = len(df_encerrados_filtrado)
@@ -1174,7 +1198,7 @@ try:
 
     with tab1:
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
-        if not df_encerrados_filtrado.empty: # Usar df_encerrados_filtrado aqui
+        if not df_encerrados_filtrado.empty:
             info_messages.append(f"- **{len(df_encerrados_filtrado)} chamados fechados no dia** (exceto RH) foram deduzidos das contagens principais.")
         st.info("\n".join(info_messages))
         st.subheader("Análise de Antiguidade do Backlog Atual")
@@ -1211,51 +1235,39 @@ try:
         if df_fechados.empty:
             st.info("O arquivo de chamados encerrados ainda não foi carregado.")
         elif not df_encerrados_filtrado.empty:
-            # --- Início da Modificação: Calcular Dias Abertos para Encerrados ---
             df_encerrados_display = df_encerrados_filtrado.copy()
-            
-            # Reutilizar a lógica de cálculo de 'analisar_aging' aqui
             date_col_enc = next((col for col in ['Data de criação', 'Data de Criacao'] if col in df_encerrados_display.columns), None)
             if date_col_enc:
                 df_encerrados_display[date_col_enc] = pd.to_datetime(df_encerrados_display[date_col_enc], errors='coerce')
-                # Calcular dias abertos até HOJE (data do relatório), pois não temos data de fechamento
                 hoje_dt = pd.to_datetime('today').normalize()
-                # Filtrar linhas com datas válidas antes do cálculo
                 valid_dates_mask = df_encerrados_display[date_col_enc].notna()
                 if valid_dates_mask.any():
                     data_criacao_norm = df_encerrados_display.loc[valid_dates_mask, date_col_enc].dt.normalize()
                     dias_calc = (hoje_dt - data_criacao_norm).dt.days
                     df_encerrados_display.loc[valid_dates_mask, 'Dias em Aberto'] = (dias_calc - 1).clip(lower=0)
-                # Preencher NA para datas inválidas ou se a coluna não existir
                 if 'Dias em Aberto' not in df_encerrados_display.columns:
                      df_encerrados_display['Dias em Aberto'] = pd.NA
                 else:
-                     df_encerrados_display['Dias em Aberto'] = df_encerrados_display['Dias em Aberto'].fillna(pd.NA)
+                     df_encerrados_display['Dias em Aberto'] = df_encerrados_display['Dias em Aberto'].fillna(pd.NA).astype('Int64') # Usar Int64 para aceitar NA
 
-                # Formatar coluna de data para exibição
+                # Formatar data após o cálculo
                 df_encerrados_display[date_col_enc] = df_encerrados_display[date_col_enc].dt.strftime('%d/%m/%Y')
-
             else:
-                 df_encerrados_display['Dias em Aberto'] = "Data Criação?" # Indicar que a coluna não foi encontrada
+                 df_encerrados_display['Dias em Aberto'] = "Data Criação?"
 
-            # Selecionar e renomear colunas para exibição
             colunas_encerrados = ['ID do ticket', 'Descrição', 'Atribuir a um grupo', 'Dias em Aberto']
-            # Adicionar data de criação se existir
             if date_col_enc and date_col_enc not in colunas_encerrados:
                 colunas_encerrados.append(date_col_enc)
             
-            # Filtrar colunas que realmente existem no DataFrame
             colunas_encerrados_existentes = [col for col in colunas_encerrados if col in df_encerrados_display.columns]
 
             st.data_editor(
                 df_encerrados_display[colunas_encerrados_existentes],
                 hide_index=True,
-                disabled=True, # Desabilitar edição para esta tabela
+                disabled=True,
                 width='stretch'
                 )
-            # --- Fim da Modificação ---
         else:
-            # Mensagem original se não houver encerrados (após filtro RH)
              st.info("Nenhum chamado encerrado (exceto RH) carregado para hoje.")
 
 
@@ -1274,25 +1286,22 @@ try:
             filtered_df = df_aging[df_aging['Faixa de Antiguidade'] == faixa_atual].copy()
             if not filtered_df.empty:
                 def highlight_row(row):
-                    # Checar se a coluna 'Contato' existe antes de acessá-la
                     return ['background-color: #fff8c4'] * len(row) if row.get('Contato', False) else [''] * len(row)
 
                 filtered_df['Contato'] = filtered_df['ID do ticket'].apply(lambda id: str(id) in st.session_state.contacted_tickets)
                 filtered_df['Observações'] = filtered_df['ID do ticket'].apply(lambda id: st.session_state.observations.get(str(id), ''))
                 st.session_state.last_filtered_df = filtered_df.reset_index(drop=True)
                 
-                # Definir colunas DEPOIS de adicionar Contato/Observações
                 colunas_para_exibir_renomeadas = {
                     'Contato': 'Contato', 'ID do ticket': 'ID do ticket', 'Descrição': 'Descrição',
                     'Atribuir a um grupo': 'Grupo Atribuído', 'Dias em Aberto': 'Dias em Aberto',
                     'Data de criação': 'Data de criação', 'Observações': 'Observações'
                 }
-                # Garantir que a coluna 'Data de criação' existe antes de tentar renomear
-                if 'Data de Criacao' in st.session_state.last_filtered_df.columns and 'Data de criação' not in st.session_state.last_filtered_df.columns:
+                date_col_name_tab1 = next((col for col in ['Data de criação', 'Data de Criacao'] if col in st.session_state.last_filtered_df.columns), None)
+                if date_col_name_tab1 == 'Data de Criacao':
                      colunas_para_exibir_renomeadas['Data de Criacao'] = 'Data de criação'
-                     del colunas_para_exibir_renomeadas['Data de criação'] # Remover a chave antiga se a nova foi adicionada
+                     if 'Data de criação' in colunas_para_exibir_renomeadas: del colunas_para_exibir_renomeadas['Data de criação']
 
-                # Filtrar colunas que realmente existem e na ordem desejada
                 colunas_a_exibir_final = [colunas_para_exibir_renomeadas[orig_col]
                                            for orig_col in colunas_para_exibir_renomeadas
                                            if orig_col in st.session_state.last_filtered_df.columns]
@@ -1313,19 +1322,16 @@ try:
             if grupo_selecionado:
                 resultados_busca = df_aging[df_aging['Atribuir a um grupo'] == grupo_selecionado].copy()
                 
-                # Formatar Data de criação se existir
                 date_col_busca = next((col for col in ['Data de criação', 'Data de Criacao'] if col in resultados_busca.columns), None)
                 if date_col_busca:
-                     # Garantir que é datetime antes de formatar
                      if pd.api.types.is_datetime64_any_dtype(resultados_busca[date_col_busca]):
                           resultados_busca[date_col_busca] = resultados_busca[date_col_busca].dt.strftime('%d/%m/%Y')
-                     else: # Tentar converter se não for datetime
+                     else:
                           resultados_busca[date_col_busca] = pd.to_datetime(resultados_busca[date_col_busca], errors='coerce').dt.strftime('%d/%m/%Y')
 
 
                 st.write(f"Encontrados {len(resultados_busca)} chamados para o grupo '{grupo_selecionado}':")
-                colunas_para_exibir_busca = ['ID do ticket', 'Descrição', 'Dias em Aberto', date_col_busca if date_col_busca else 'Data de criação'] # Usar nome correto da coluna
-                # Filtrar colunas que realmente existem
+                colunas_para_exibir_busca = ['ID do ticket', 'Descrição', 'Dias em Aberto', date_col_busca if date_col_busca else 'Data de criação']
                 colunas_para_exibir_busca_exist = [col for col in colunas_para_exibir_busca if col in resultados_busca.columns]
                 st.data_editor(resultados_busca[colunas_para_exibir_busca_exist], width='stretch', hide_index=True, disabled=True)
 
@@ -1391,30 +1397,34 @@ try:
 
             orientation_choice = st.radio( "Orientação do Gráfico:", ["Vertical", "Horizontal"], index=0, horizontal=True, key="radio_tab2_orient" )
 
-            if orientation_choice == 'Horizontal':
-                num_groups = len(sorted_new_labels)
-                dynamic_height = max(500, num_groups * 30)
-                fig_stacked_bar_tab2 = px.bar(
-                    chart_data, x='Quantidade', y='Atribuir a um grupo (com total)', orientation='h', color='Faixa de Antiguidade',
-                    title="Composição da Idade do Backlog por Grupo",
-                    labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo (com total)': ''},
-                    category_orders={'Atribuir a um grupo (com total)': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas},
-                    color_discrete_map=color_map, text_auto=True
-                )
-                fig_stacked_bar_tab2.update_traces(textangle=0, textfont_size=12)
-                fig_stacked_bar_tab2.update_layout(height=dynamic_height, legend_title_text='Antiguidade')
-            else:
-                fig_stacked_bar_tab2 = px.bar(
-                    chart_data, x='Atribuir a um grupo (com total)', y='Quantidade', color='Faixa de Antiguidade',
-                    title="Composição da Idade do Backlog por Grupo",
-                    labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo (com total)': 'Grupo'},
-                    category_orders={'Atribuir a um grupo (com total)': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas},
-                    color_discrete_map=color_map, text_auto=True
-                )
-                fig_stacked_bar_tab2.update_traces(textangle=0, textfont_size=12)
-                fig_stacked_bar_tab2.update_layout(height=600, xaxis_title=None, xaxis_tickangle=-45, legend_title_text='Antiguidade')
+            # Garantir que chart_data não está vazio antes de tentar plotar
+            if not chart_data.empty:
+                if orientation_choice == 'Horizontal':
+                    num_groups = len(sorted_new_labels)
+                    dynamic_height = max(500, num_groups * 30)
+                    fig_stacked_bar_tab2 = px.bar(
+                        chart_data, x='Quantidade', y='Atribuir a um grupo (com total)', orientation='h', color='Faixa de Antiguidade',
+                        title="Composição da Idade do Backlog por Grupo",
+                        labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo (com total)': ''},
+                        category_orders={'Atribuir a um grupo (com total)': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas},
+                        color_discrete_map=color_map, text_auto=True
+                    )
+                    fig_stacked_bar_tab2.update_traces(textangle=0, textfont_size=12)
+                    fig_stacked_bar_tab2.update_layout(height=dynamic_height, legend_title_text='Antiguidade')
+                else:
+                    fig_stacked_bar_tab2 = px.bar(
+                        chart_data, x='Atribuir a um grupo (com total)', y='Quantidade', color='Faixa de Antiguidade',
+                        title="Composição da Idade do Backlog por Grupo",
+                        labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo (com total)': 'Grupo'},
+                        category_orders={'Atribuir a um grupo (com total)': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas},
+                        color_discrete_map=color_map, text_auto=True
+                    )
+                    fig_stacked_bar_tab2.update_traces(textangle=0, textfont_size=12)
+                    fig_stacked_bar_tab2.update_layout(height=600, xaxis_title=None, xaxis_tickangle=-45, legend_title_text='Antiguidade')
 
-            st.plotly_chart(fig_stacked_bar_tab2, use_container_width=True)
+                st.plotly_chart(fig_stacked_bar_tab2, use_container_width=True)
+            else:
+                 st.warning("Dados insuficientes para gerar o gráfico de distribuição por grupo.")
         else:
             st.warning("Nenhum dado para gerar o report visual.")
 
@@ -1565,6 +1575,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.30-746 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.30-747 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
