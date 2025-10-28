@@ -1,4 +1,4 @@
-# VERSÃO v0.9.24-733 (Base 0.9.23 + Correção "Scaffold" para faixas com 0)
+# VERSÃO v0.9.25-734 (Base 0.9.24 + Tab4 com 6 cards de métrica)
 
 import streamlit as st
 import pandas as pd
@@ -332,7 +332,6 @@ def find_closest_snapshot(_repo, current_report_date, target_date):
         st.warning(f"Erro ao buscar snapshots: {e}")
         return None, None
 
-# --- INÍCIO DA MODIFICAÇÃO (Correção v0.9.24) ---
 @st.cache_data(ttl=3600)
 def carregar_evolucao_aging(_repo, closed_ticket_ids_list, dias_para_analisar=90):
     try:
@@ -425,7 +424,6 @@ def carregar_evolucao_aging(_repo, closed_ticket_ids_list, dias_para_analisar=90
     except Exception as e:
         st.error(f"Erro ao carregar evolução de aging: {e}")
         return pd.DataFrame()
-# --- FIM DA MODIFICAÇÃO (Correção v0.9.24) ---
 
 st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
 
@@ -767,7 +765,7 @@ try:
         else: 
             st.info("Ainda não há dados históricos suficientes.")
             
-    # --- INÍCIO DA MODIFICAÇÃO (Correção v0.9.24) ---
+    # --- INÍCIO DA MODIFICAÇÃO (v0.9.25 - 6 cards de métrica) ---
     with tab4:
         st.subheader("Evolução do Aging do Backlog (Todas as Faixas)")
         st.info("Esta aba analisa os 'snapshots' diários para calcular a contagem de **todas as faixas de antiguidade** em cada data. O 'Hoje' é calculado em tempo real.")
@@ -782,7 +780,6 @@ try:
                 hoje_counts_raw = df_aging['Faixa de Antiguidade'].value_counts().reset_index()
                 hoje_counts_raw.columns = ['Faixa de Antiguidade', 'total']
                 
-                # --- INÍCIO DA CORREÇÃO (Garantir todas as 6 faixas para "Hoje") ---
                 ordem_faixas_scaffold = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
                 df_todas_faixas_hoje = pd.DataFrame({'Faixa de Antiguidade': ordem_faixas_scaffold})
                 
@@ -794,7 +791,6 @@ try:
                 ).fillna(0)
                 
                 hoje_counts_df['total'] = hoje_counts_df['total'].astype(int)
-                # --- FIM DA CORREÇÃO ---
                 
                 hoje_data = pd.to_datetime(datetime.strptime(data_atual_str, "%d/%m/%Y").date())
                 hoje_counts_df['data'] = hoje_data
@@ -837,57 +833,66 @@ try:
             data_inicio_filtro = opcoes_periodo[periodo_selecionado]
             df_filtrado_datas = df_combinado[df_combinado['data'].dt.date >= data_inicio_filtro].copy()
             
-            # --- 5. Métricas (Focada nos 30+ dias) ---
-            st.markdown("##### Comparativo Diário - Foco em 30+ dias")
+            # --- 5. Métricas (Todas as Faixas) ---
+            st.markdown("##### Comparativo Diário (Hoje vs. Dia Anterior)")
             
-            df_metrica_30_mais = df_filtrado_datas[
-                df_filtrado_datas['Faixa de Antiguidade'] == '30+ dias'
-            ].set_index('data').sort_index()
+            # Criar 2 linhas de 3 colunas
+            cols_linha1 = st.columns(3)
+            cols_linha2 = st.columns(3)
+            cols_map = {0: cols_linha1[0], 1: cols_linha1[1], 2: cols_linha1[2],
+                          3: cols_linha2[0], 4: cols_linha2[1], 5: cols_linha2[2]}
 
+            for i, faixa in enumerate(ordem_faixas_scaffold):
+                with cols_map[i]:
+                    df_metrica = df_filtrado_datas[
+                        df_filtrado_datas['Faixa de Antiguidade'] == faixa
+                    ].set_index('data').sort_index()
 
-            if df_metrica_30_mais.empty:
-                st.info("Não há dados de '30+ dias' para o período selecionado.")
-            
-            elif len(df_metrica_30_mais) >= 2:
-                dados_recentes = df_metrica_30_mais.iloc[-2:] 
-                
-                valor_ontem = dados_recentes['total'].iloc[0]
-                valor_hoje = dados_recentes['total'].iloc[1]
-                
-                data_ontem_str = dados_recentes.index[0].strftime('%d/%m')
-                data_hoje_str = dados_recentes.index[1].strftime('%d/%m')
-
-                delta_abs = int(valor_hoje - valor_ontem)
-                
-                if valor_ontem > 0:
-                    delta_perc = (delta_abs / valor_ontem)
-                else:
-                    delta_perc = 0 
-                
-                delta_perc_str = f"{delta_perc * 100:.1f}%"
-
-                col1, col2, col3 = st.columns([1, 2, 1])
-                with col2:
-                    st.metric(
-                        label=f"Chamados +30 Dias ({data_hoje_str})",
-                        value=int(valor_hoje),
-                        delta=f"{delta_abs} ({delta_perc_str}) vs. {data_ontem_str}",
-                        delta_color="inverse" 
-                    )
+                    if df_metrica.empty:
+                        st.metric(
+                            label=faixa,
+                            value="N/A",
+                            delta="Sem dados no período",
+                            delta_color="off"
+                        )
                     
-            elif len(df_metrica_30_mais) == 1:
-                valor_hoje = df_metrica_30_mais['total'].iloc[0]
-                data_hoje_str = df_metrica_30_mais.index[0].strftime('%d/%m')
-                col1, col2, col3 = st.columns([1, 2, 1])
-                with col2:
-                    st.metric(
-                        label=f"Chamados +30 Dias ({data_hoje_str})",
-                        value=int(valor_hoje),
-                        delta="Aguardando mais dados para comparação",
-                        delta_color="off"
-                    )
+                    elif len(df_metrica) >= 2:
+                        dados_recentes = df_metrica.iloc[-2:] 
+                        valor_ontem = dados_recentes['total'].iloc[0]
+                        valor_hoje = dados_recentes['total'].iloc[1]
+                        data_ontem_str = dados_recentes.index[0].strftime('%d/%m')
+                        data_hoje_str = dados_recentes.index[1].strftime('%d/%m')
+                        
+                        delta_abs = int(valor_hoje - valor_ontem)
+                        
+                        if valor_ontem > 0:
+                            delta_perc = (delta_abs / valor_ontem)
+                            delta_perc_str = f"{delta_perc * 100:.1f}%"
+                            delta_text = f"{delta_abs} ({delta_perc_str}) vs. {data_ontem_str}"
+                        elif valor_ontem == 0 and valor_hoje > 0:
+                            delta_text = f"+{delta_abs} (Novo) vs. {data_ontem_str}"
+                        else: # Cobre 0 vs 0
+                            delta_text = f"{delta_abs} (0.0%) vs. {data_ontem_str}"
+
+                        st.metric(
+                            label=f"{faixa} ({data_hoje_str})",
+                            value=int(valor_hoje),
+                            delta=delta_text,
+                            delta_color="inverse" # Vermelho para qualquer aumento
+                        )
+                            
+                    elif len(df_metrica) == 1:
+                        valor_hoje = df_metrica['total'].iloc[0]
+                        data_hoje_str = df_metrica.index[0].strftime('%d/%m')
+                        st.metric(
+                            label=f"{faixa} ({data_hoje_str})",
+                            value=int(valor_hoje),
+                            delta="Aguardando mais dados",
+                            delta_color="off"
+                        )
             
             st.divider()
+            # --- FIM DA SEÇÃO DE MÉTRICA ---
 
             # --- 6. Gráficos (Todas as faixas) ---
             st.markdown(f"##### Gráfico de Evolução ({periodo_selecionado})")
@@ -899,7 +904,7 @@ try:
                 df_grafico['Data (Eixo)'] = df_grafico['data'].dt.strftime('%d/%m')
                 ordem_datas_grafico = df_grafico['Data (Eixo)'].unique().tolist()
                 
-                ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
+                # ordem_faixas já definida
                 def lighten_color(hex_color, amount=0.2):
                     try:
                         hex_color = hex_color.lstrip('#')
@@ -910,7 +915,7 @@ try:
                     except Exception: return hex_color
                 base_color = "#375623"
                 palette = [ lighten_color(base_color, 0.85), lighten_color(base_color, 0.70), lighten_color(base_color, 0.55), lighten_color(base_color, 0.40), lighten_color(base_color, 0.20), base_color ]
-                color_map = {faixa: color for faixa, color in zip(ordem_faixas, palette)}
+                color_map = {faixa: color for faixa, color in zip(ordem_faixas_scaffold, palette)}
                 
                 tipo_grafico = st.radio(
                     "Selecione o tipo de gráfico:",
@@ -929,7 +934,7 @@ try:
                         labels={"Data (Eixo)": "Data", "total": "Total Chamados", "Faixa de Antiguidade": "Faixa"},
                         category_orders={
                             'Data (Eixo)': ordem_datas_grafico,
-                            'Faixa de Antiguidade': ordem_faixas
+                            'Faixa de Antiguidade': ordem_faixas_scaffold
                         },
                         color_discrete_map=color_map
                     )
@@ -944,7 +949,7 @@ try:
                         labels={"Data (Eixo)": "Data", "total": "Total Chamados", "Faixa de Antiguidade": "Faixa"},
                         category_orders={
                             'Data (Eixo)': ordem_datas_grafico,
-                            'Faixa de Antiguidade': ordem_faixas
+                            'Faixa de Antiguidade': ordem_faixas_scaffold
                         },
                         color_discrete_map=color_map
                     )
@@ -963,6 +968,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.24-733 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.25-734 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
