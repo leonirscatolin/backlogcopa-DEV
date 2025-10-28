@@ -1,4 +1,4 @@
-# VERSÃO v0.9.25-734 (Base 0.9.24 + Tab4 com 6 cards de métrica)
+# VERSÃO v0.9.26-735 (Base 0.9.25 + Tab4 com período fixo em 7 dias)
 
 import streamlit as st
 import pandas as pd
@@ -395,7 +395,6 @@ def carregar_evolucao_aging(_repo, closed_ticket_ids_list, dias_para_analisar=90
                 contagem_faixas = pd.Series(faixas_antiguidade).value_counts().reset_index()
                 contagem_faixas.columns = ['Faixa de Antiguidade', 'total']
 
-                # --- INÍCIO DA CORREÇÃO (Garantir todas as 6 faixas) ---
                 ordem_faixas_scaffold = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
                 df_todas_faixas = pd.DataFrame({'Faixa de Antiguidade': ordem_faixas_scaffold})
                 
@@ -408,10 +407,9 @@ def carregar_evolucao_aging(_repo, closed_ticket_ids_list, dias_para_analisar=90
                 
                 contagem_completa['total'] = contagem_completa['total'].astype(int)
                 contagem_completa['data'] = snapshot_date_dt
-                # --- FIM DA CORREÇÃO ---
                 
                 # 7. Salva
-                lista_historico.append(contagem_completa) # Usa o dataframe completo
+                lista_historico.append(contagem_completa) 
             
             except Exception:
                 continue
@@ -765,7 +763,7 @@ try:
         else: 
             st.info("Ainda não há dados históricos suficientes.")
             
-    # --- INÍCIO DA MODIFICAÇÃO (v0.9.25 - 6 cards de métrica) ---
+    # --- INÍCIO DA MODIFICAÇÃO (v0.9.26 - Período Fixo) ---
     with tab4:
         st.subheader("Evolução do Aging do Backlog (Todas as Faixas)")
         st.info("Esta aba analisa os 'snapshots' diários para calcular a contagem de **todas as faixas de antiguidade** em cada data. O 'Hoje' é calculado em tempo real.")
@@ -773,6 +771,8 @@ try:
         try:
             # 1. Carrega dados históricos dos snapshots (todas as faixas)
             df_hist = carregar_evolucao_aging(repo, closed_ticket_ids_list=closed_ticket_ids, dias_para_analisar=90)
+            
+            ordem_faixas_scaffold = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
 
             # 2. Pega o dado de "Hoje" do df_aging (todas as faixas)
             if 'df_aging' in locals() and not df_aging.empty:
@@ -780,7 +780,6 @@ try:
                 hoje_counts_raw = df_aging['Faixa de Antiguidade'].value_counts().reset_index()
                 hoje_counts_raw.columns = ['Faixa de Antiguidade', 'total']
                 
-                ordem_faixas_scaffold = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
                 df_todas_faixas_hoje = pd.DataFrame({'Faixa de Antiguidade': ordem_faixas_scaffold})
                 
                 hoje_counts_df = pd.merge(
@@ -815,22 +814,15 @@ try:
 
             # --- UI (Filtros e Métricas) ---
             
-            # 4. Filtro de Período
+            # 4. Filtro de Período (Padronizado para 7 dias)
             hoje_filtro = datetime.now().date()
-            opcoes_periodo = {
-                'Últimos 7 dias': hoje_filtro - timedelta(days=7),
-                'Últimos 30 dias': hoje_filtro - timedelta(days=30),
-                'Últimos 90 dias': hoje_filtro - timedelta(days=90),
-                'Desde o início': df_combinado['data'].min().date()
-            }
+            periodo_selecionado = "Últimos 7 dias"
+            
+            # Ajuste para garantir que estamos pegando 7 dias *antes* do filtro
+            data_inicio_filtro = hoje_filtro - timedelta(days=7)
 
-            periodo_selecionado = st.selectbox(
-                "Selecione o período:",
-                options=list(opcoes_periodo.keys()),
-                key="periodo_aging_all" 
-            )
-
-            data_inicio_filtro = opcoes_periodo[periodo_selecionado]
+            # st.selectbox removido
+            
             df_filtrado_datas = df_combinado[df_combinado['data'].dt.date >= data_inicio_filtro].copy()
             
             # --- 5. Métricas (Todas as Faixas) ---
@@ -968,6 +960,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.25-734 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.26-735 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
