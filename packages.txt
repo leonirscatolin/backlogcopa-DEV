@@ -4,3 +4,4 @@ libatk-bridge2.0-0
 libgtk-3-0
 libgbm-dev
 libgbm1
+xvfb
