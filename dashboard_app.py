@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-731 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final + Read UTF-8-SIG + Indent Fix 3)
+# VERSÃO v0.9.20-730 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final + Read UTF-8-SIG + Indent Fix Final)
 
 import streamlit as st
 import pandas as pd
@@ -16,6 +16,7 @@ import json
 import colorsys
 import re # Importado para parsear datas dos nomes de arquivo
 import csv # Importado para sniffer
+from pandas.errors import ParserError, EmptyDataError # Import specific pandas errors
 
 st.set_page_config(
     layout="wide",
@@ -97,7 +98,7 @@ def read_github_file(_repo, file_path):
              df = pd.read_csv(StringIO(content), delimiter=';', encoding='utf-8',
                               dtype={'ID do ticket': str, 'ID do Ticket': str}, low_memory=False,
                               on_bad_lines='warn')
-        except pd.errors.ParserError as parse_err:
+        except (ParserError, EmptyDataError) as parse_err: # Catch specific pandas errors
              st.error(f"Erro ao parsear o CSV '{file_path}': {parse_err}. Verifique delimitador (;) e estrutura.")
              return pd.DataFrame()
         except Exception as read_err:
@@ -172,28 +173,24 @@ def process_uploaded_file(uploaded_file):
                 sniffer = csv.Sniffer()
                 delimiter = ';' # Default delimiter
                 try:
-                    # Check first few lines for delimiter
                     sample = content_str[:2048]
-                    # Check if sample is not empty or just whitespace
                     if sample and not sample.isspace():
                         dialect = sniffer.sniff(sample)
                         delimiter = dialect.delimiter
                         if delimiter != ';':
                              st.sidebar.warning(f"Detectado delimitador '{delimiter}' no arquivo CSV. Usando '{delimiter}'.")
                     else:
-                        # If sample is empty/whitespace, keep default delimiter but maybe warn
                         st.sidebar.warning("Amostra inicial do CSV vazia ou contém apenas espaços. Usando delimitador ';' por padrão.")
                 except csv.Error:
-                     # If sniffer fails, assume semicolon but allow pandas to try auto-detect later if needed
                     delimiter = None
                     st.sidebar.warning("Não foi possível detectar o delimitador CSV automaticamente. Tentando ';' e auto-detecção.")
 
 
                 df = pd.read_csv(StringIO(content_str),
-                                 delimiter=delimiter, # Use detected or default ';'
-                                 sep=None if delimiter is None else EngineError, # Allow pandas fallback if sniffer failed
+                                 delimiter=delimiter,
+                                 sep=None if delimiter is None else EngineError, # Allow pandas fallback
                                  dtype=dtype_spec, low_memory=False, on_bad_lines='warn',
-                                 engine='python' if delimiter is None else 'c') # Use python engine for sep=None
+                                 engine='python' if delimiter is None else 'c')
 
             except Exception as read_err:
                  st.sidebar.error(f"Erro ao ler o arquivo CSV {uploaded_file.name}: {read_err}")
@@ -414,8 +411,8 @@ def find_closest_snapshot(_repo, current_report_date, target_date):
     except GithubException as e:
         if e.status == 404: # Se a pasta snapshots não existir
             return None, None
-        st.warning(f"Erro ao buscar snapshots no GitHub: {e}") # Correct indentation
-        return None, None # Correct indentation
+        st.warning(f"Erro ao buscar snapshots no GitHub: {e}") 
+        return None, None 
     except Exception as e:
         st.warning(f"Erro inesperado ao buscar snapshots: {e}") # Correct indentation
         return None, None # Correct indentation
@@ -424,9 +421,9 @@ def find_closest_snapshot(_repo, current_report_date, target_date):
 
 st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
 
-# ... (Restante do código das tabs 1, 2, 3 permanece igual) ...
+# ... (Restante do código, incluindo a Tab 4, permanece o mesmo da versão anterior v0.9.20-728) ...
 
-# --- Código da Tab 4 com os ajustes finais ---
+# --- Código da Tab 4 (sem alterações, apenas para completude) ---
 with tab4:
     st.subheader("Análise Semana vs Semana: Variação do Backlog por Grupo")
         
