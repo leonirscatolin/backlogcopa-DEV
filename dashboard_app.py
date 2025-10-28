@@ -1,9 +1,9 @@
-# VERSÃO v0.9.30-741 (Correção PNG e Tab2)
+# VERSÃO v0.9.30-742
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go 
+import plotly.graph_objects as go
 import numpy as np
 import base64
 from datetime import datetime, date, timedelta
@@ -26,7 +26,6 @@ st.set_page_config(
 
 st.html("""
 <style>
-/* ... (Seu CSS original completo - sem mudanças) ... */
 #GithubIcon { visibility: hidden; }
 .metric-box {
     border: 1px solid #CCCCCC;
@@ -78,7 +77,6 @@ a.metric-box:hover {
 
 @st.cache_resource
 def get_github_repo():
-    # ... (Sua função original - sem mudanças) ...
     try:
         expected_repo_name = st.secrets.get("EXPECTED_REPO")
         if not expected_repo_name:
@@ -98,7 +96,6 @@ def get_github_repo():
         st.stop()
 
 def update_github_file(_repo, file_path, file_content, commit_message):
-    # ... (Sua função original - sem mudanças) ...
     try:
         contents = _repo.get_contents(file_path)
         if isinstance(file_content, str):
@@ -119,7 +116,6 @@ def update_github_file(_repo, file_path, file_content, commit_message):
 
 @st.cache_data(ttl=300)
 def read_github_file(_repo, file_path):
-    # ... (Sua função original - sem mudanças) ...
     try:
         content_file = _repo.get_contents(file_path)
         content_bytes = content_file.decoded_content
@@ -164,7 +160,6 @@ def read_github_file(_repo, file_path):
 
 @st.cache_data(ttl=300)
 def read_github_text_file(_repo, file_path):
-    # ... (Sua função original - sem mudanças) ...
     try:
         content_file = _repo.get_contents(file_path)
         content = content_file.decoded_content.decode("utf-8")
@@ -187,7 +182,6 @@ def read_github_text_file(_repo, file_path):
 
 @st.cache_data(ttl=300)
 def read_github_json_dict(_repo, file_path):
-    # ... (Sua função original - sem mudanças) ...
     try:
         file_content = _repo.get_contents(file_path).decoded_content.decode("utf-8")
         return json.loads(file_content) if file_content else {}
@@ -203,7 +197,6 @@ def read_github_json_dict(_repo, file_path):
         return {}
 
 def process_uploaded_file(uploaded_file):
-    # ... (Sua função original - sem mudanças) ...
     if uploaded_file is None:
         return None
     try:
@@ -228,7 +221,6 @@ def process_uploaded_file(uploaded_file):
         return None
 
 def processar_dados_comparativos(df_atual, df_15dias):
-    # ... (Sua função original - sem mudanças) ...
     contagem_atual = df_atual.groupby('Atribuir a um grupo').size().reset_index(name='Atual')
     contagem_15dias = df_15dias.groupby('Atribuir a um grupo').size().reset_index(name='15 Dias Atrás')
     df_comparativo = pd.merge(contagem_atual, contagem_15dias, on='Atribuir a um grupo', how='outer').fillna(0)
@@ -238,7 +230,6 @@ def processar_dados_comparativos(df_atual, df_15dias):
 
 @st.cache_data
 def categorizar_idade_vetorizado(dias_series):
-    # ... (Sua função original - sem mudanças) ...
     condicoes = [
         dias_series >= 30, (dias_series >= 21) & (dias_series <= 29),
         (dias_series >= 11) & (dias_series <= 20), (dias_series >= 6) & (dias_series <= 10),
@@ -249,7 +240,6 @@ def categorizar_idade_vetorizado(dias_series):
 
 @st.cache_data
 def analisar_aging(_df_atual):
-    # ... (Sua função original - sem mudanças) ...
     df = _df_atual.copy()
     date_col_name = None
     if 'Data de criação' in df.columns: date_col_name = 'Data de criação'
@@ -270,14 +260,12 @@ def analisar_aging(_df_atual):
     return df
 
 def get_status(row):
-    # ... (Sua função original - sem mudanças) ...
     diferenca = row['Diferença']
     if diferenca > 0: return "Alta Demanda"
     elif diferenca == 0: return "Estável / Atenção"
     else: return "Redução de Backlog"
 
 def get_image_as_base64(path):
-    # ... (Sua função original - sem mudanças) ...
     try:
         with open(path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode()
@@ -285,7 +273,6 @@ def get_image_as_base64(path):
         return None
 
 def sync_ticket_data():
-    # ... (Sua função original - sem mudanças) ...
     if 'ticket_editor' not in st.session_state or not st.session_state.ticket_editor.get('edited_rows'):
         return
     edited_rows = st.session_state.ticket_editor['edited_rows']
@@ -329,7 +316,6 @@ def sync_ticket_data():
 
 @st.cache_data(ttl=3600)
 def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7):
-    # ... (Sua função original - sem mudanças) ...
     try:
         all_files_content = _repo.get_contents("snapshots")
         all_files = [f.path for f in all_files_content]
@@ -384,7 +370,6 @@ def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7)
 
 @st.cache_data(ttl=300)
 def find_closest_snapshot_before(_repo, current_report_date, target_date):
-    # ... (Sua função original - sem mudanças) ...
     try:
         all_files_content = _repo.get_contents("snapshots")
         snapshots = []
@@ -409,7 +394,6 @@ def find_closest_snapshot_before(_repo, current_report_date, target_date):
 
 @st.cache_data(ttl=3600)
 def carregar_evolucao_aging(_repo, closed_ticket_ids_list, dias_para_analisar=90):
-    # ... (Sua função original - sem mudanças) ...
     try:
         all_files_content = _repo.get_contents("snapshots")
         all_files = [f.path for f in all_files_content]
@@ -493,7 +477,6 @@ def carregar_evolucao_aging(_repo, closed_ticket_ids_list, dias_para_analisar=90
         return pd.DataFrame()
 
 def formatar_delta_card(delta_abs, delta_perc, valor_comparacao, data_comparacao_str):
-    # ... (Sua função original - sem mudanças) ...
     delta_abs = int(delta_abs)
     if valor_comparacao > 0:
         delta_perc_str = f"{delta_perc * 100:.1f}%"
@@ -516,7 +499,6 @@ def formatar_delta_card(delta_abs, delta_perc, valor_comparacao, data_comparacao
 
 
 def lighten_color(hex_color, amount=0.2):
-    # ... (Sua função original - sem mudanças) ...
     try:
         hex_color = hex_color.lstrip('#')
         h, l, s = colorsys.rgb_to_hls(*[int(hex_color[i:i+2], 16)/255.0 for i in (0, 2, 4)])
@@ -526,21 +508,20 @@ def lighten_color(hex_color, amount=0.2):
     except Exception: return hex_color
 
 
-# ### INÍCIO DA MODIFICAÇÃO PNG (Fontes e Cores) ###
 try:
-    FONT_LABEL = ImageFont.truetype("arial.ttf", 16)
-    FONT_VALUE = ImageFont.truetype("arialbd.ttf", 36)
-    FONT_DELTA = ImageFont.truetype("arial.ttf", 12)
-    FONT_TITULO_SECAO = ImageFont.truetype("arialbd.ttf", 24)
-    FONT_PLACEHOLDER = ImageFont.truetype("arial.ttf", 20)
+    FONT_LABEL = ImageFont.truetype("Roboto-Regular.ttf", 16)
+    FONT_VALUE = ImageFont.truetype("Roboto-Bold.ttf", 36)
+    FONT_DELTA = ImageFont.truetype("Roboto-Regular.ttf", 12)
+    FONT_TITULO_SECAO = ImageFont.truetype("Roboto-Bold.ttf", 24)
+    FONT_PLACEHOLDER = ImageFont.truetype("Roboto-Regular.ttf", 20)
 except IOError:
+    st.warning("Arquivos de fonte (Roboto-Regular.ttf, Roboto-Bold.ttf) não encontrados. A qualidade do PNG pode ser baixa.")
     FONT_LABEL = ImageFont.load_default()
     FONT_VALUE = ImageFont.load_default()
     FONT_DELTA = ImageFont.load_default()
     FONT_TITULO_SECAO = ImageFont.load_default()
     FONT_PLACEHOLDER = ImageFont.load_default()
 
-# Cores
 COLOR_BACKGROUND = (255, 255, 255)
 COLOR_LABEL = (102, 102, 102)
 COLOR_VALUE = (55, 86, 35)
@@ -555,66 +536,79 @@ COLOR_PLACEHOLDER_TEXT = (150, 150, 150)
 CARD_WIDTH = 380
 CARD_HEIGHT = 120
 CARD_PADDING = 10
-# ### FIM DA MODIFICAÇÃO PNG ###
 
-# ### INÍCIO DA MODIFICAÇÃO PNG (Funções de Desenho) ###
 def _desenhar_card(draw, x_offset, y_offset, label, value_str, delta_str="", delta_class="delta-neutral"):
     """Função auxiliar para desenhar um único card no estilo metric-box."""
-    # ... (Sua função original - sem mudanças) ...
     draw.rectangle(
         (x_offset, y_offset, x_offset + CARD_WIDTH, y_offset + CARD_HEIGHT),
         outline=COLOR_BORDER, fill=COLOR_BACKGROUND
     )
+    
     label_bbox = draw.textbbox((0, 0), label, font=FONT_LABEL)
     value_bbox = draw.textbbox((0, 0), value_str, font=FONT_VALUE)
+    
     label_x = x_offset + (CARD_WIDTH - (label_bbox[2] - label_bbox[0])) / 2
     value_x = x_offset + (CARD_WIDTH - (value_bbox[2] - value_bbox[0])) / 2
+    
     total_text_height = (label_bbox[3] - label_bbox[1]) + (value_bbox[3] - value_bbox[1]) + 5
     if delta_str:
-        total_text_height += 15 # Adiciona espaço para o delta
+        total_text_height += 15
+    
     current_y = y_offset + (CARD_HEIGHT - total_text_height) / 2
+    
     draw.text((label_x, current_y), label, font=FONT_LABEL, fill=COLOR_LABEL)
     current_y += (label_bbox[3] - label_bbox[1]) + 5
+    
     draw.text((value_x, current_y), value_str, font=FONT_VALUE, fill=COLOR_VALUE)
     current_y += (value_bbox[3] - value_bbox[1]) + 5
+    
     if delta_str:
         delta_bbox = draw.textbbox((0, 0), delta_str, font=FONT_DELTA)
         delta_x = x_offset + (CARD_WIDTH - (delta_bbox[2] - delta_bbox[0])) / 2
+        
         if delta_class == "delta-positive": delta_color = COLOR_DELTA_POS
         elif delta_class == "delta-negative": delta_color = COLOR_DELTA_NEG
         else: delta_color = COLOR_DELTA_NEU
+            
         draw.text((delta_x, current_y), delta_str, font=FONT_DELTA, fill=delta_color)
 
 def _criar_imagem_kpis_topo(total_aberto, total_fechado, data_atual, hora_atual):
     """Cria os dois KPIs principais: Total Aberto e Fechados no Dia."""
-    # ... (Sua função original - sem mudanças) ...
     img_width = CARD_WIDTH * 2 + CARD_PADDING * 3
     img_height = CARD_HEIGHT + CARD_PADDING * 2
+    
     img = Image.new('RGB', (img_width, img_height), color=COLOR_BACKGROUND)
     draw = ImageDraw.Draw(img)
+    
     data_str = f"Data: {data_atual} (às {hora_atual})" if hora_atual else f"Data: {data_atual}"
+    
     _desenhar_card(draw, CARD_PADDING, CARD_PADDING,
                    "Total de Chamados Abertos",
                    str(total_aberto),
                    data_str,
                    "delta-neutral")
+    
     valor_fechados_str = str(total_fechado) if total_fechado > 0 else "N/A"
     _desenhar_card(draw, CARD_WIDTH + CARD_PADDING * 2, CARD_PADDING,
                    "Chamados Fechados no Dia",
                    valor_fechados_str)
+                   
     return img
 
 def _criar_imagem_kpis_aging(aging_counts_df):
     """Cria os 6 cards das faixas de antiguidade (da tab1)."""
-    # ... (Sua função original - sem mudanças) ...
-    img_width = CARD_WIDTH * 3 + CARD_PADDING * 4 # 3 cards por linha
-    img_height = (CARD_HEIGHT * 2) + (CARD_PADDING * 3) # 2 linhas
+    img_width = CARD_WIDTH * 3 + CARD_PADDING * 4
+    img_height = (CARD_HEIGHT * 2) + (CARD_PADDING * 3)
+    
     img = Image.new('RGB', (img_width, img_height), color=COLOR_BACKGROUND)
     draw = ImageDraw.Draw(img)
+    
     x_pos = [CARD_PADDING, CARD_WIDTH + CARD_PADDING * 2, CARD_WIDTH * 2 + CARD_PADDING * 3]
     y_pos = [CARD_PADDING, CARD_HEIGHT + CARD_PADDING * 2]
+    
     col = 0
     row = 0
+    
     for _, r in aging_counts_df.iterrows():
         _desenhar_card(draw, x_pos[col], y_pos[row],
                        r['Faixa de Antiguidade'],
@@ -623,37 +617,45 @@ def _criar_imagem_kpis_aging(aging_counts_df):
         if col > 2:
             col = 0
             row += 1
+            
     return img
 
 def _criar_imagem_kpis_comparativo_aging(hoje_counts_df, df_comparacao_dados, data_comparacao_str, ordem_faixas, formatar_delta_card_func):
     """Cria os 6 cards de comparativo de aging (da tab4)."""
-    # ... (Sua função original - sem mudanças) ...
-    img_width = CARD_WIDTH * 3 + CARD_PADDING * 4 # 3 cards por linha
-    img_height = (CARD_HEIGHT * 2) + (CARD_PADDING * 3) # 2 linhas
+    img_width = CARD_WIDTH * 3 + CARD_PADDING * 4
+    img_height = (CARD_HEIGHT * 2) + (CARD_PADDING * 3)
+    
     img = Image.new('RGB', (img_width, img_height), color=COLOR_BACKGROUND)
     draw = ImageDraw.Draw(img)
+    
     x_pos = [CARD_PADDING, CARD_WIDTH + CARD_PADDING * 2, CARD_WIDTH * 2 + CARD_PADDING * 3]
     y_pos = [CARD_PADDING, CARD_HEIGHT + CARD_PADDING * 2]
+    
     col = 0
     row = 0
+    
     for faixa in ordem_faixas:
         valor_hoje = 'N/A'
         if not hoje_counts_df.empty:
             valor_hoje_series = hoje_counts_df.loc[hoje_counts_df['Faixa de Antiguidade'] == faixa, 'total']
             if not valor_hoje_series.empty:
                 valor_hoje = int(valor_hoje_series.iloc[0])
+
         valor_comparacao = 0
         delta_text = "N/A"
         delta_class = "delta-neutral"
+
         if data_comparacao_str != "N/A" and not df_comparacao_dados.empty and isinstance(valor_hoje, int):
             valor_comp_series = df_comparacao_dados.loc[df_comparacao_dados['Faixa de Antiguidade'] == faixa, 'total']
             if not valor_comp_series.empty:
                 valor_comparacao = int(valor_comp_series.iloc[0])
+
             delta_abs = valor_hoje - valor_comparacao
             delta_perc = (delta_abs / valor_comparacao) if valor_comparacao > 0 else 0
             delta_text, delta_class = formatar_delta_card_func(delta_abs, delta_perc, valor_comparacao, data_comparacao_str)
         elif isinstance(valor_hoje, int):
             delta_text = "Sem dados para comparar"
+
         _desenhar_card(draw, x_pos[col], y_pos[row],
                        faixa,
                        str(valor_hoje),
@@ -663,20 +665,18 @@ def _criar_imagem_kpis_comparativo_aging(hoje_counts_df, df_comparacao_dados, da
         if col > 2:
             col = 0
             row += 1
+            
     return img
 
 def _add_titulo_secao(draw, titulo, y_pos, img_width):
     """Desenha um título de seção centralizado."""
-    # ... (Sua função original - sem mudanças) ...
     bbox = draw.textbbox((0, 0), titulo, font=FONT_TITULO_SECAO)
     x_pos = (img_width - (bbox[2] - bbox[0])) / 2
     draw.text((x_pos, y_pos), titulo, font=FONT_TITULO_SECAO, fill=COLOR_TITULO_SECAO)
-    return y_pos + (bbox[3] - bbox[1]) + 20 # Retorna nova posição Y
+    return y_pos + (bbox[3] - bbox[1]) + 20
 
 def _criar_imagem_placeholder(titulo_secao, width=1200, height=450):
-    """
-    (NOVA FUNÇÃO) Cria uma imagem de placeholder para gráficos sem dados.
-    """
+    """Cria uma imagem de placeholder para gráficos sem dados."""
     img = Image.new('RGB', (width, height), color=COLOR_PLACEHOLDER_BG)
     draw = ImageDraw.Draw(img)
     
@@ -686,19 +686,16 @@ def _criar_imagem_placeholder(titulo_secao, width=1200, height=450):
     bbox_texto = draw.textbbox((0,0), texto, font=FONT_PLACEHOLDER)
     
     x_titulo = (width - (bbox_titulo[2] - bbox_titulo[0])) / 2
-    y_titulo = (height / 2) - (bbox_titulo[3] - bbox_titulo[1]) - 10 # 10px acima do centro
+    y_titulo = (height / 2) - (bbox_titulo[3] - bbox_titulo[1]) - 10
     
     x_texto = (width - (bbox_texto[2] - bbox_texto[0])) / 2
-    y_texto = (height / 2) + 10 # 10px abaixo do centro
+    y_texto = (height / 2) + 10
     
     draw.text((x_titulo, y_titulo), titulo_secao, font=FONT_PLACEHOLDER, fill=COLOR_PLACEHOLDER_TEXT)
     draw.text((x_texto, y_texto), texto, font=FONT_PLACEHOLDER, fill=COLOR_PLACEHOLDER_TEXT)
     
     return img
-# ### FIM DA MODIFICAÇÃO PNG ###
 
-
-# ### INÍCIO DA MODIFICAÇÃO PNG (Função Principal do Relatório) ###
 def gerar_relatorio_png(
     fig_composicao_grupo,
     total_aberto, total_fechados, data_atual, hora_atual,
@@ -709,25 +706,22 @@ def gerar_relatorio_png(
     fig_evol_7_dias
 ):
     """
-    (FUNÇÃO ATUALIZADA) Gera o relatório PNG.
-    Verifica se os gráficos têm dados antes de tentar exportar.
+    Gera o relatório PNG.
+    Verifica se os gráficos têm dados e usa scale=2 para alta resolução.
     """
     
     lista_imagens_pillow = []
     
-    # --- 1. KPIs do Topo (Total e Fechados) ---
     img_kpis_topo = _criar_imagem_kpis_topo(total_aberto, total_fechados, data_atual, hora_atual)
     lista_imagens_pillow.append(("Cards Principais", img_kpis_topo))
 
-    # --- 2. KPIs de Aging (6 Faixas) ---
     img_kpis_aging = _criar_imagem_kpis_aging(df_aging_counts)
     lista_imagens_pillow.append(("Cards de Antiguidade", img_kpis_aging))
 
-    # --- 3. Composição da Idade por Grupo (Gráfico) ---
     titulo_secao_3 = "Composição da Idade do Backlog por Grupo"
     if fig_composicao_grupo and fig_composicao_grupo.data:
         try:
-            img_data = fig_composicao_grupo.to_image(format="png", width=1200, height=600, engine="kaleido")
+            img_data = fig_composicao_grupo.to_image(format="png", width=1200, height=600, engine="kaleido", scale=2)
             lista_imagens_pillow.append((titulo_secao_3, Image.open(BytesIO(img_data))))
         except Exception as e:
             st.warning(f"Erro ao exportar '{titulo_secao_3}': {e}")
@@ -735,11 +729,10 @@ def gerar_relatorio_png(
     else:
         lista_imagens_pillow.append((titulo_secao_3, _criar_imagem_placeholder(titulo_secao_3, height=600)))
 
-    # --- 4. Evolução do Total Geral (Gráfico) ---
     titulo_secao_4 = "Evolução do Total Geral"
     if fig_evol_geral and fig_evol_geral.data:
         try:
-            img_data = fig_evol_geral.to_image(format="png", width=1200, height=450, engine="kaleido")
+            img_data = fig_evol_geral.to_image(format="png", width=1200, height=450, engine="kaleido", scale=2)
             lista_imagens_pillow.append((titulo_secao_4, Image.open(BytesIO(img_data))))
         except Exception as e:
             st.warning(f"Erro ao exportar '{titulo_secao_4}': {e}")
@@ -747,11 +740,10 @@ def gerar_relatorio_png(
     else:
         lista_imagens_pillow.append((titulo_secao_4, _criar_imagem_placeholder(titulo_secao_4, height=450)))
 
-    # --- 5. Evolução por Grupo (Gráfico) ---
     titulo_secao_5 = "Evolução por Grupo"
     if fig_evol_grupo and fig_evol_grupo.data:
         try:
-            img_data = fig_evol_grupo.to_image(format="png", width=1200, height=600, engine="kaleido")
+            img_data = fig_evol_grupo.to_image(format="png", width=1200, height=600, engine="kaleido", scale=2)
             lista_imagens_pillow.append((titulo_secao_5, Image.open(BytesIO(img_data))))
         except Exception as e:
             st.warning(f"Erro ao exportar '{titulo_secao_5}': {e}")
@@ -759,17 +751,15 @@ def gerar_relatorio_png(
     else:
         lista_imagens_pillow.append((titulo_secao_5, _criar_imagem_placeholder(titulo_secao_5, height=600)))
 
-    # --- 6. Comparativo de Aging (6 Cards) ---
     img_kpis_comp_aging = _criar_imagem_kpis_comparativo_aging(
         hoje_counts_df, df_comparacao_dados, data_comparacao_str, ordem_faixas, formatar_delta_card_func
     )
     lista_imagens_pillow.append(("Comparativo de Antiguidade (Hoje vs. 7 dias)", img_kpis_comp_aging))
 
-    # --- 7. Gráfico de Evolução 7 Dias (Gráfico) ---
     titulo_secao_7 = "Evolução do Aging (Últimos 7 dias)"
     if fig_evol_7_dias and fig_evol_7_dias.data:
         try:
-            img_data = fig_evol_7_dias.to_image(format="png", width=1200, height=500, engine="kaleido")
+            img_data = fig_evol_7_dias.to_image(format="png", width=1200, height=500, engine="kaleido", scale=2)
             lista_imagens_pillow.append((titulo_secao_7, Image.open(BytesIO(img_data))))
         except Exception as e:
             st.warning(f"Erro ao exportar '{titulo_secao_7}': {e}")
@@ -777,12 +767,12 @@ def gerar_relatorio_png(
     else:
         lista_imagens_pillow.append((titulo_secao_7, _criar_imagem_placeholder(titulo_secao_7, height=500)))
 
-    # --- Montagem Final ---
+    
     max_width = 0
     for _, img in lista_imagens_pillow:
         if img.width > max_width:
             max_width = img.width
-    if max_width < 1200: max_width = 1200 # Garante largura mínima
+    if max_width < 1200: max_width = 1200 
 
     total_height = 0
     padding_vertical = 50 
@@ -808,14 +798,10 @@ def gerar_relatorio_png(
     
     return img_buffer
 
-# ### FIM DA MODIFICAÇÃO PNG ###
-
-
 
 logo_copa_b64 = get_image_as_base64("logo_sidebar.png")
 logo_belago_b64 = get_image_as_base64("logo_belago.png")
 if logo_copa_b64 and logo_belago_b64:
-    # ... (Seu código original - sem mudanças) ...
     st.markdown(f"""<div style="display: flex; justify-content: space-between; align-items: center;"><img src="data:image/png;base64,{logo_copa_b64}" width="150"><h1 style='text-align: center; margin: 0;'>Backlog Copa Energia + Belago</h1><img src="data:image/png;base64,{logo_belago_b64}" width="150"></div>""", unsafe_allow_html=True)
 else:
     st.error("Arquivos de logo não encontrados.")
@@ -828,7 +814,6 @@ password = st.sidebar.text_input("Senha para atualizar dados:", type="password")
 is_admin = password == st.secrets.get("ADMIN_PASSWORD", "")
 
 if is_admin:
-    # ... (Seu código original do admin - sem mudanças) ...
     st.sidebar.success("Acesso de administrador liberado.")
     st.sidebar.subheader("Atualização Completa")
     uploaded_file_atual = st.sidebar.file_uploader("1. Backlog ATUAL", type=["csv", "xlsx"], key="uploader_atual")
@@ -875,14 +860,19 @@ if is_admin:
                 if content_fechados is not None:
                     try:
                         update_github_file(repo, "dados_fechados.csv", content_fechados, commit_msg)
+
+                        # --- INÍCIO DA MODIFICAÇÃO v0.9.30 ---
                         datas_existentes = read_github_text_file(repo, "datas_referencia.txt")
                         data_atual_existente = datas_existentes.get('data_atual', 'N/A')
                         data_15dias_existente = datas_existentes.get('data_15dias', 'N/A')
                         hora_atualizacao_nova = now_sao_paulo.strftime('%H:%M')
+
                         datas_referencia_content_novo = (f"data_atual:{data_atual_existente}\n"
                                                        f"data_15dias:{data_15dias_existente}\n"
                                                        f"hora_atualizacao:{hora_atualizacao_nova}")
                         update_github_file(repo, "datas_referencia.txt", datas_referencia_content_novo.encode('utf-8'), commit_msg)
+                        # --- FIM DA MODIFICAÇÃO v0.9.30 ---
+
                         st.cache_data.clear()
                         st.cache_resource.clear()
                         st.sidebar.success("Arquivo de fechados salvo e hora atualizada! Recarregando...")
@@ -896,7 +886,6 @@ elif password:
 
 try:
     if 'contacted_tickets' not in st.session_state:
-        # ... (Seu código original - sem mudanças) ...
         try:
             file_content = repo.get_contents("contacted_tickets.json").decoded_content.decode("utf-8")
             st.session_state.contacted_tickets = set(json.loads(file_content))
@@ -909,7 +898,6 @@ try:
 
     needs_scroll = "scroll" in st.query_params
     if "faixa" in st.query_params:
-        # ... (Seu código original - sem mudanças) ...
         faixa_from_url = st.query_params.get("faixa")
         ordem_faixas_validas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
         if faixa_from_url in ordem_faixas_validas:
@@ -932,7 +920,6 @@ try:
 
     closed_ticket_ids = []
     if not df_fechados.empty:
-        # ... (Seu código original - sem mudanças) ...
         id_col_name = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_fechados.columns), None)
         if id_col_name:
             df_fechados[id_col_name] = df_fechados[id_col_name].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
@@ -945,10 +932,7 @@ try:
     df_aging = analisar_aging(df_atual_filtrado)
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
 
-
-    # ### INÍCIO DA MODIFICAÇÃO (Pré-cálculo dos dados e gráficos) ###
     
-    # --- Dados da Tab 1 ---
     total_chamados = len(df_aging) if not df_aging.empty else 0
     total_fechados = len(df_encerrados_filtrado)
     ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
@@ -963,8 +947,7 @@ try:
     else:
         aging_counts = pd.DataFrame({'Faixa de Antiguidade': ordem_faixas, 'Quantidade': 0})
 
-    # --- Dados e Gráfico da Tab 2 (Composição por Grupo) ---
-    fig_stacked_bar_para_png = go.Figure() # Placeholder para o PNG
+    fig_stacked_bar_para_png = go.Figure()
     chart_data = pd.DataFrame()
     sorted_new_labels = []
     color_map = {}
@@ -973,13 +956,12 @@ try:
         chart_data = df_aging.groupby(['Atribuir a um grupo', 'Faixa de Antiguidade']).size().reset_index(name='Quantidade')
         group_totals = chart_data.groupby('Atribuir a um grupo')['Quantidade'].sum().sort_values(ascending=False)
         new_labels_map = {group: f"{group} ({total})" for group, total in group_totals.items()}
-        chart_data['Atribuir a um grupo (com total)'] = chart_data['Atribuir a um grupo'].map(new_labels_map) # Nova coluna para a tab2
+        chart_data['Atribuir a um grupo (com total)'] = chart_data['Atribuir a um grupo'].map(new_labels_map)
         sorted_new_labels = [new_labels_map[group] for group in group_totals.index]
         base_color = "#375623"
         palette = [ lighten_color(base_color, 0.85), lighten_color(base_color, 0.70), lighten_color(base_color, 0.55), lighten_color(base_color, 0.40), lighten_color(base_color, 0.20), base_color ]
         color_map = {faixa: color for faixa, color in zip(ordem_faixas, palette)}
         
-        # Gerar a versão VERTICAL para o PNG
         fig_stacked_bar_para_png = px.bar( 
             chart_data, x='Atribuir a um grupo (com total)', y='Quantidade', color='Faixa de Antiguidade', 
             title="Composição da Idade do Backlog por Grupo", 
@@ -990,7 +972,6 @@ try:
         fig_stacked_bar_para_png.update_traces(textangle=0, textfont_size=12)
         fig_stacked_bar_para_png.update_layout(height=600, xaxis_title=None, xaxis_tickangle=-45, legend_title_text='Antiguidade')
 
-    # --- Gráficos da Tab 3 (Evolução) ---
     dias_evolucao_default = 7 
     df_evolucao_tab3 = carregar_dados_evolucao(repo, closed_ticket_ids_list=closed_ticket_ids, dias_para_analisar=dias_evolucao_default)
     
@@ -998,7 +979,6 @@ try:
     fig_evolucao_grupo = go.Figure() 
 
     if not df_evolucao_tab3.empty:
-        # ... (Mesma lógica de antes) ...
         df_evolucao_tab3['Data'] = pd.to_datetime(df_evolucao_tab3['Data'])
         df_evolucao_tab3 = df_evolucao_tab3[df_evolucao_tab3['Data'].dt.dayofweek < 5].copy()
 
@@ -1029,7 +1009,6 @@ try:
             )
             fig_evolucao_grupo.update_layout(height=600)
 
-    # --- Dados e Gráfico da Tab 4 (Evolução Aging) ---
     ordem_faixas_scaffold = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
     hoje_data = None
     hoje_counts_df = pd.DataFrame()
@@ -1064,7 +1043,6 @@ try:
             df_combinado['data'] = pd.to_datetime(df_combinado['data'])
             df_combinado = df_combinado.sort_values(by=['data', 'Faixa de Antiguidade'])
 
-            # --- Lógica de Comparação (para cards do PNG) ---
             if hoje_data:
                 target_comp_date_7dias = hoje_data.date() - timedelta(days=7)
                 data_comp_encontrada_7dias, _ = find_closest_snapshot_before(repo, hoje_data.date(), target_comp_date_7dias)
@@ -1073,7 +1051,6 @@ try:
                     data_comparacao_str_7dias = data_comparacao_final_7dias.strftime('%d/%m')
                     df_comparacao_dados_7dias = df_combinado[df_combinado['data'] == data_comparacao_final_7dias].copy()
 
-            # --- Lógica do Gráfico (7 dias) ---
             hoje_filtro_grafico = datetime.now().date()
             data_inicio_filtro_grafico = hoje_filtro_grafico - timedelta(days=7)
             df_filtrado_grafico = df_combinado[df_combinado['data'].dt.date >= data_inicio_filtro_grafico].copy()
@@ -1087,7 +1064,6 @@ try:
                 palette_aging = [ lighten_color(base_color_aging, 0.85), lighten_color(base_color_aging, 0.70), lighten_color(base_color_aging, 0.55), lighten_color(base_color_aging, 0.40), lighten_color(base_color_aging, 0.20), base_color_aging ]
                 color_map_aging = {faixa: color for faixa, color in zip(ordem_faixas_scaffold, palette_aging)}
 
-                # Usar "Gráfico de Área" como padrão para o PNG
                 fig_aging_all = px.area(
                     df_grafico, x='Data (Eixo)', y='total', color='Faixa de Antiguidade',
                     title='Composição da Evolução por Antiguidade (Últimos 7 dias)',
@@ -1099,13 +1075,10 @@ try:
     except Exception as e_tab4:
         st.error(f"Ocorreu um erro ao pré-calcular dados da Tab4: {e_tab4}")
     
-    # ### FIM DA MODIFICAÇÃO ###
-
-
+    
     tab1, tab2, tab3, tab4 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal", "Evolução Aging"])
 
     with tab1:
-        # ... (Seu código original da tab1 - sem mudanças) ...
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
         if not df_encerrados.empty:
             info_messages.append(f"- **{len(df_encerrados_filtrado)} chamados fechados no dia** (exceto RH) foram deduzidos das contagens principais.")
@@ -1151,7 +1124,6 @@ try:
         if not df_aging.empty:
             st.markdown("---")
             st.subheader("Detalhar e Buscar Chamados")
-            # ... (Restante da sua tab1 original - sem mudanças) ...
             st.info('Marque "Contato" se já falou com o usuário e a solicitação continua pendente. Use "Observações" para anotações.')
             if 'scroll_to_details' not in st.session_state:
                 st.session_state.scroll_to_details = False
@@ -1192,7 +1164,6 @@ try:
                 colunas_para_exibir_busca = ['ID do ticket', 'Descrição', 'Dias em Aberto', 'Data de criação']
                 st.data_editor(resultados_busca[[col for col in colunas_para_exibir_busca if col in resultados_busca.columns]], use_container_width=True, hide_index=True, disabled=True)
 
-    # ### INÍCIO DA MODIFICAÇÃO (Tab2 Restaurada + Botão) ###
     with tab2:
         st.subheader("Gerar Relatório Unificado em PNG")
         st.markdown("Este recurso compila os principais indicadores e gráficos do dashboard em uma **única imagem PNG** para fácil compartilhamento.")
@@ -1201,7 +1172,7 @@ try:
             with st.spinner("Gerando seu relatório... isso pode levar alguns segundos..."):
                 try:
                     report_png_buffer = gerar_relatorio_png(
-                        fig_composicao_grupo=fig_stacked_bar_para_png, # Gráfico vertical pré-calculado
+                        fig_composicao_grupo=fig_stacked_bar_para_png,
                         total_aberto=total_chamados,
                         total_fechados=total_fechados,
                         data_atual=data_atual_str,
@@ -1210,7 +1181,7 @@ try:
                         fig_evol_geral=fig_total_evolucao,
                         fig_evol_grupo=fig_evolucao_grupo,
                         hoje_counts_df=hoje_counts_df, 
-                        df_comparacao_dados=df_comparacao_dados_7dias, # Usa a comparação de 7 dias
+                        df_comparacao_dados=df_comparacao_dados_7dias,
                         data_comparacao_str=data_comparacao_str_7dias, 
                         ordem_faixas=ordem_faixas_scaffold, 
                         formatar_delta_card_func=formatar_delta_card,
@@ -1231,17 +1202,14 @@ try:
 
         st.markdown("---")
 
-        # --- Início do Conteúdo Original da Tab2 (Restaurado) ---
         st.subheader("Resumo do Backlog Atual")
         if not df_aging.empty:
-            # Usar 'total_chamados' pré-calculado
             _, col_total_tab2, _ = st.columns([2, 1.5, 2])
             with col_total_tab2: 
                 st.markdown( f"""<div class="metric-box"><span class="label">Total de Chamados</span><span class="value">{total_chamados}</span></div>""", unsafe_allow_html=True )
             
             st.markdown("---")
             
-            # Usar 'aging_counts' pré-calculado
             cols_tab2 = st.columns(len(ordem_faixas))
             for i, row in aging_counts.iterrows():
                 with cols_tab2[i]: 
@@ -1251,9 +1219,6 @@ try:
             st.subheader("Distribuição do Backlog por Grupo")
             
             orientation_choice = st.radio( "Orientação do Gráfico:", ["Vertical", "Horizontal"], index=0, horizontal=True, key="radio_tab2_orient" )
-            
-            # Usar 'chart_data', 'sorted_new_labels', 'color_map' pré-calculados
-            # Mas gerar a 'fig_stacked_bar_tab2' aqui dentro, para respeitar a orientação
             
             if orientation_choice == 'Horizontal':
                 num_groups = len(sorted_new_labels)
@@ -1268,7 +1233,6 @@ try:
                 fig_stacked_bar_tab2.update_traces(textangle=0, textfont_size=12)
                 fig_stacked_bar_tab2.update_layout(height=dynamic_height, legend_title_text='Antiguidade')
             else:
-                # Esta figura é idêntica à 'fig_stacked_bar_para_png'
                 fig_stacked_bar_tab2 = px.bar( 
                     chart_data, x='Atribuir a um grupo (com total)', y='Quantidade', color='Faixa de Antiguidade', 
                     title="Composição da Idade do Backlog por Grupo", 
@@ -1282,12 +1246,8 @@ try:
             st.plotly_chart(fig_stacked_bar_tab2, use_container_width=True)
         else:
             st.warning("Nenhum dado para gerar o report visual.")
-    # ### FIM DA MODIFICAÇÃO (Tab2 Restaurada) ###
-
 
     with tab3:
-        # ... (Seu código original da tab3 - sem mudanças) ...
-        # (Este código usa o slider e recarrega os dados, o que está correto)
         st.subheader("Evolução do Backlog")
         dias_evolucao = st.slider("Ver evolução dos últimos dias:", min_value=7, max_value=30, value=7, key="slider_evolucao")
         df_evolucao_tab3_slider = carregar_dados_evolucao(repo, closed_ticket_ids_list=closed_ticket_ids, dias_para_analisar=dias_evolucao)
@@ -1328,8 +1288,6 @@ try:
             st.info("Ainda não há dados históricos suficientes.")
 
     with tab4:
-        # ... (Seu código original da tab4 - sem mudanças) ...
-        # (Este código usa os dados pré-calculados e os botões de rádio, o que está correto)
         st.subheader("Evolução do Aging do Backlog")
         try:
             if df_combinado.empty:
@@ -1431,6 +1389,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.30-741 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.30-742 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
