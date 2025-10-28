@@ -1,4 +1,4 @@
-# VERSÃO v0.9.29-739 (Base 0.9.28 + Remoção de Comentários)
+# VERSÃO v0.9.30-740 (Base 0.9.28 + Correção Atualização Hora em Fechados)
 
 import streamlit as st
 import pandas as pd
@@ -100,17 +100,18 @@ def update_github_file(_repo, file_path, file_content, commit_message):
         if isinstance(file_content, str):
             file_content = file_content.encode('utf-8')
         _repo.update_file(contents.path, commit_message, file_content, contents.sha)
-        if file_path not in ["contacted_tickets.json", "ticket_observations.json"]:
+        if file_path not in ["contacted_tickets.json", "ticket_observations.json", "datas_referencia.txt"]: # Evitar spam de msg
             st.sidebar.info(f"Arquivo '{file_path}' atualizado.")
     except GithubException as e:
         if e.status == 404:
             if isinstance(file_content, str):
                 file_content = file_content.encode('utf-8')
             _repo.create_file(file_path, commit_message, file_content)
-            if file_path not in ["contacted_tickets.json", "ticket_observations.json"]:
+            if file_path not in ["contacted_tickets.json", "ticket_observations.json", "datas_referencia.txt"]: # Evitar spam de msg
                 st.sidebar.info(f"Arquivo '{file_path}' criado.")
         else:
             st.sidebar.error(f"Falha ao salvar '{file_path}': {e}")
+            raise # Re-levanta a exceção para o bloco superior tratar
 
 @st.cache_data(ttl=300)
 def read_github_file(_repo, file_path):
@@ -167,8 +168,16 @@ def read_github_text_file(_repo, file_path):
                 key, value = line.split(':', 1)
                 dates[key.strip()] = value.strip()
         return dates
-    except Exception:
+    except GithubException as e:
+        if e.status == 404: # Arquivo pode não existir na primeira vez
+            return {}
+        else:
+            st.warning(f"Erro ao ler {file_path}: {e}")
+            return {}
+    except Exception as e:
+        st.warning(f"Erro inesperado ao ler {file_path}: {e}")
         return {}
+
 
 @st.cache_data(ttl=300)
 def read_github_json_dict(_repo, file_path):
@@ -515,22 +524,26 @@ if is_admin:
                 content_atual = process_uploaded_file(uploaded_file_atual)
                 content_15dias = process_uploaded_file(uploaded_file_15dias)
                 if content_atual is not None and content_15dias is not None:
-                    update_github_file(repo, "dados_atuais.csv", content_atual, commit_msg)
-                    update_github_file(repo, "dados_15_dias.csv", content_15dias, commit_msg)
-                    today_str = now_sao_paulo.strftime('%Y-%m-%d')
-                    snapshot_path = f"snapshots/backlog_{today_str}.csv"
-                    update_github_file(repo, snapshot_path, content_atual, f"Snapshot de {today_str}")
-                    data_do_upload = now_sao_paulo.date()
-                    data_arquivo_15dias = data_do_upload - timedelta(days=15)
-                    hora_atualizacao = now_sao_paulo.strftime('%H:%M')
-                    datas_referencia_content = (f"data_atual:{data_do_upload.strftime('%d/%m/%Y')}\n"
-                                               f"data_15dias:{data_arquivo_15dias.strftime('%d/%m/%Y')}\n"
-                                               f"hora_atualizacao:{hora_atualizacao}")
-                    update_github_file(repo, "datas_referencia.txt", datas_referencia_content.encode('utf-8'), commit_msg)
-                    st.cache_data.clear()
-                    st.cache_resource.clear()
-                    st.sidebar.success("Arquivos salvos! Forçando recarregamento...")
-                    st.rerun()
+                    try:
+                        update_github_file(repo, "dados_atuais.csv", content_atual, commit_msg)
+                        update_github_file(repo, "dados_15_dias.csv", content_15dias, commit_msg)
+                        today_str = now_sao_paulo.strftime('%Y-%m-%d')
+                        snapshot_path = f"snapshots/backlog_{today_str}.csv"
+                        update_github_file(repo, snapshot_path, content_atual, f"Snapshot de {today_str}")
+                        data_do_upload = now_sao_paulo.date()
+                        data_arquivo_15dias = data_do_upload - timedelta(days=15)
+                        hora_atualizacao = now_sao_paulo.strftime('%H:%M')
+                        datas_referencia_content = (f"data_atual:{data_do_upload.strftime('%d/%m/%Y')}\n"
+                                                   f"data_15dias:{data_arquivo_15dias.strftime('%d/%m/%Y')}\n"
+                                                   f"hora_atualizacao:{hora_atualizacao}")
+                        update_github_file(repo, "datas_referencia.txt", datas_referencia_content.encode('utf-8'), commit_msg)
+                        st.cache_data.clear()
+                        st.cache_resource.clear()
+                        st.sidebar.success("Arquivos salvos! Forçando recarregamento...")
+                        st.rerun()
+                    except Exception as e:
+                        st.sidebar.error(f"Erro durante a atualização completa: {e}")
+
         else:
             st.sidebar.warning("Para a atualização completa, carregue os arquivos ATUAL e de 15 DIAS.")
     st.sidebar.markdown("---")
@@ -543,11 +556,29 @@ if is_admin:
                 commit_msg = f"Atualizando chamados fechados em {now_sao_paulo.strftime('%d/%m/%Y %H:%M')}"
                 content_fechados = process_uploaded_file(uploaded_file_fechados)
                 if content_fechados is not None:
-                    update_github_file(repo, "dados_fechados.csv", content_fechados, commit_msg)
-                    st.cache_data.clear()
-                    st.cache_resource.clear()
-                    st.sidebar.success("Arquivo de fechados salvo! Recarregando...")
-                    st.rerun()
+                    try:
+                        # Salva o arquivo de fechados
+                        update_github_file(repo, "dados_fechados.csv", content_fechados, commit_msg)
+
+                        # --- INÍCIO DA MODIFICAÇÃO v0.9.30 ---
+                        # Atualiza a hora em datas_referencia.txt
+                        datas_existentes = read_github_text_file(repo, "datas_referencia.txt")
+                        data_atual_existente = datas_existentes.get('data_atual', 'N/A')
+                        data_15dias_existente = datas_existentes.get('data_15dias', 'N/A')
+                        hora_atualizacao_nova = now_sao_paulo.strftime('%H:%M')
+
+                        datas_referencia_content_novo = (f"data_atual:{data_atual_existente}\n"
+                                                        f"data_15dias:{data_15dias_existente}\n"
+                                                        f"hora_atualizacao:{hora_atualizacao_nova}")
+                        update_github_file(repo, "datas_referencia.txt", datas_referencia_content_novo.encode('utf-8'), commit_msg)
+                        # --- FIM DA MODIFICAÇÃO v0.9.30 ---
+
+                        st.cache_data.clear()
+                        st.cache_resource.clear()
+                        st.sidebar.success("Arquivo de fechados salvo e hora atualizada! Recarregando...")
+                        st.rerun()
+                    except Exception as e:
+                         st.sidebar.error(f"Erro durante a atualização rápida: {e}")
         else:
             st.sidebar.warning("Por favor, carregue o arquivo de chamados fechados para salvar.")
 elif password:
