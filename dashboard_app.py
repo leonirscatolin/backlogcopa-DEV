@@ -1,4 +1,4 @@
-# VERSÃO v0.9.26-735 (Base 0.9.25 + Tab4 com período fixo em 7 dias)
+# VERSÃO v0.9.27-737 (Base 0.9.26 + Remoção st.info e Ajuste Título Tab4)
 
 import streamlit as st
 import pandas as pd
@@ -763,10 +763,11 @@ try:
         else: 
             st.info("Ainda não há dados históricos suficientes.")
             
-    # --- INÍCIO DA MODIFICAÇÃO (v0.9.26 - Período Fixo) ---
+    # --- INÍCIO DA MODIFICAÇÃO (v0.9.27) ---
     with tab4:
-        st.subheader("Evolução do Aging do Backlog (Todas as Faixas)")
-        st.info("Esta aba analisa os 'snapshots' diários para calcular a contagem de **todas as faixas de antiguidade** em cada data. O 'Hoje' é calculado em tempo real.")
+        # Título ajustado
+        st.subheader("Evolução do Aging do Backlog") 
+        # st.info removido
 
         try:
             # 1. Carrega dados históricos dos snapshots (todas as faixas)
@@ -820,8 +821,6 @@ try:
             
             # Ajuste para garantir que estamos pegando 7 dias *antes* do filtro
             data_inicio_filtro = hoje_filtro - timedelta(days=7)
-
-            # st.selectbox removido
             
             df_filtrado_datas = df_combinado[df_combinado['data'].dt.date >= data_inicio_filtro].copy()
             
@@ -960,6 +959,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.26-735 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.27-737 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
