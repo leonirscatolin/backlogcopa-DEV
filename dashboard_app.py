@@ -1,4 +1,4 @@
-# VERSÃO v0.9.22-731 (Base 0.9.21 + Remoção Tab4 + Tab Evolução Aging Completa)
+# VERSÃO v0.9.23-732 (Base 0.9.22 + Tab4 (Aging) sem filtro de dias úteis)
 
 import streamlit as st
 import pandas as pd
@@ -332,14 +332,12 @@ def find_closest_snapshot(_repo, current_report_date, target_date):
         st.warning(f"Erro ao buscar snapshots: {e}")
         return None, None
 
-# --- MODIFICADO ---
-# Função modificada para calcular TODAS as faixas de aging
 @st.cache_data(ttl=3600)
 def carregar_evolucao_aging(_repo, closed_ticket_ids_list, dias_para_analisar=90):
     try:
         all_files_content = _repo.get_contents("snapshots")
         all_files = [f.path for f in all_files_content]
-        lista_historico = [] # Lista para dataframes
+        lista_historico = [] 
         
         end_date = date.today() - timedelta(days=1) 
         start_date = end_date - timedelta(days=dias_para_analisar)
@@ -407,13 +405,11 @@ def carregar_evolucao_aging(_repo, closed_ticket_ids_list, dias_para_analisar=90
         if not lista_historico:
             return pd.DataFrame()
         
-        # Concatena todos os dataframes da lista em um só
         return pd.concat(lista_historico, ignore_index=True)
 
     except Exception as e:
         st.error(f"Erro ao carregar evolução de aging: {e}")
         return pd.DataFrame()
-# --- FIM DA MODIFICAÇÃO ---
 
 st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
 
@@ -531,8 +527,6 @@ try:
     
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
     
-    # --- MODIFICADO ---
-    # Removida a "tab4" original e "tab5" virou a nova "tab4"
     tab1, tab2, tab3, tab4 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal", "Evolução Aging"])
     
     with tab1:
@@ -757,7 +751,7 @@ try:
         else: 
             st.info("Ainda não há dados históricos suficientes.")
             
-    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 (antiga 5) com todas as faixas) ---
+    # --- INÍCIO DA MODIFICAÇÃO (Tab 4 (Aging) sem filtro de dias úteis) ---
     with tab4:
         st.subheader("Evolução do Aging do Backlog (Todas as Faixas)")
         st.info("Esta aba analisa os 'snapshots' diários para calcular a contagem de **todas as faixas de antiguidade** em cada data. O 'Hoje' é calculado em tempo real.")
@@ -811,22 +805,24 @@ try:
 
             # Filtra o dataframe com base na seleção
             data_inicio_filtro = opcoes_periodo[periodo_selecionado]
-            df_filtrado_datas = df_combinado[df_combinado['data'].dt.date >= data_inicio_filtro]
+            df_filtrado_datas = df_combinado[df_combinado['data'].dt.date >= data_inicio_filtro].copy()
             
-            # Filtra apenas dias de semana (Seg-Sex), como na tab3
-            df_filtrado_dias_uteis = df_filtrado_datas[df_filtrado_datas['data'].dt.dayofweek < 5].copy()
+            # (LINHA DE FILTRO DE DIAS ÚTEIS REMOVIDA)
 
             # --- 5. Métricas (Focada nos 30+ dias) ---
-            st.markdown("##### Comparativo Diário (Dias Úteis) - Foco em 30+ dias")
+            # Título atualizado
+            st.markdown("##### Comparativo Diário - Foco em 30+ dias")
             
             # Filtra apenas o "30+ dias" para a métrica
-            df_metrica_30_mais = df_filtrado_dias_uteis[
-                df_filtrado_dias_uteis['Faixa de Antiguidade'] == '30+ dias'
+            # Modificado para usar 'df_filtrado_datas'
+            df_metrica_30_mais = df_filtrado_datas[
+                df_filtrado_datas['Faixa de Antiguidade'] == '30+ dias'
             ].set_index('data').sort_index()
 
 
             if df_metrica_30_mais.empty:
-                st.info("Não há dados de '30+ dias' para o período selecionado (considerando dias de semana).")
+                # Texto atualizado
+                st.info("Não há dados de '30+ dias' para o período selecionado.")
             
             elif len(df_metrica_30_mais) >= 2:
                 dados_recentes = df_metrica_30_mais.iloc[-2:] 
@@ -872,11 +868,13 @@ try:
             # --- 6. Gráficos (Todas as faixas) ---
             st.markdown(f"##### Gráfico de Evolução ({periodo_selecionado})")
             
-            if df_filtrado_dias_uteis.empty:
-                st.warning("Não há dados de dias úteis para o período selecionado.")
+            # Modificado para usar 'df_filtrado_datas'
+            if df_filtrado_datas.empty:
+                st.warning("Não há dados para o período selecionado.")
             else:
                 # Prepara dados para o gráfico
-                df_grafico = df_filtrado_dias_uteis.sort_values(by='data')
+                # Modificado para usar 'df_filtrado_datas'
+                df_grafico = df_filtrado_datas.sort_values(by='data')
                 df_grafico['Data (Eixo)'] = df_grafico['data'].dt.strftime('%d/%m')
                 ordem_datas_grafico = df_grafico['Data (Eixo)'].unique().tolist()
                 
@@ -907,7 +905,7 @@ try:
                         x='Data (Eixo)',
                         y='total',
                         color='Faixa de Antiguidade',
-                        title='Evolução por Faixa de Antiguidade (Dias Úteis)',
+                        title='Evolução por Faixa de Antiguidade', # Título atualizado
                         markers=True,
                         labels={"Data (Eixo)": "Data", "total": "Total Chamados", "Faixa de Antiguidade": "Faixa"},
                         category_orders={
@@ -922,7 +920,7 @@ try:
                         x='Data (Eixo)',
                         y='total',
                         color='Faixa de Antiguidade',
-                        title='Composição da Evolução por Antiguidade (Dias Úteis)',
+                        title='Composição da Evolução por Antiguidade', # Título atualizado
                         markers=True,
                         labels={"Data (Eixo)": "Data", "total": "Total Chamados", "Faixa de Antiguidade": "Faixa"},
                         category_orders={
@@ -937,7 +935,7 @@ try:
 
         except Exception as e:
             st.error(f"Ocorreu um erro ao gerar a aba de Evolução Aging: {e}")
-            st.exception(e) # Mostra o stack trace para debug
+            st.exception(e) 
     # --- FIM DA MODIFICAÇÃO ---
 
 except Exception as e:
@@ -946,6 +944,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.22-731 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.23-732 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
