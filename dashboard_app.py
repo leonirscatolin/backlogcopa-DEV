@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-730 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final + Read UTF-8-SIG + Indent Fix Final)
+# VERSÃO v0.9.20-731 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final + Read UTF-8-SIG + Indent Fix Final)
 
 import streamlit as st
 import pandas as pd
@@ -16,7 +16,7 @@ import json
 import colorsys
 import re # Importado para parsear datas dos nomes de arquivo
 import csv # Importado para sniffer
-from pandas.errors import ParserError, EmptyDataError # Import specific pandas errors
+from pandas.errors import ParserError, EmptyDataError, EngineError # Import specific pandas errors
 
 st.set_page_config(
     layout="wide",
@@ -421,7 +421,7 @@ def find_closest_snapshot(_repo, current_report_date, target_date):
 
 st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
 
-# ... (Restante do código, incluindo a Tab 4, permanece o mesmo da versão anterior v0.9.20-728) ...
+# ... (Restante do código das tabs 1, 2, 3 permanece igual) ...
 
 # --- Código da Tab 4 (sem alterações, apenas para completude) ---
 with tab4:
@@ -543,6 +543,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-729 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-730 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
