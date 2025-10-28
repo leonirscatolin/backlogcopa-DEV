@@ -1,4 +1,4 @@
-# VERSÃO v0.9.30-743
+# VERSÃO v0.9.30-745 (Relatório .eml para Download)
 
 import streamlit as st
 import pandas as pd
@@ -17,6 +17,12 @@ import json
 import colorsys
 import re
 
+# Imports para Email (usados para criar o .eml)
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
+import uuid # Para gerar IDs únicos para imagens
+
 st.set_page_config(
     layout="wide",
     page_title="Backlog Copa Energia + Belago",
@@ -24,6 +30,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# ... (Seu CSS original completo - sem mudanças) ...
 st.html("""
 <style>
 #GithubIcon { visibility: hidden; }
@@ -71,12 +78,42 @@ a.metric-box:hover {
 .delta-positive { color: #d9534f; } /* Vermelho para aumento */
 .delta-negative { color: #5cb85c; } /* Verde para redução */
 .delta-neutral { color: #666666; } /* Cinza para sem mudança ou N/A */
+
+/* Estilo Básico para Tabelas no Email */
+.email-table {
+    border-collapse: collapse;
+    width: 90%;
+    margin: 20px auto;
+    font-family: sans-serif;
+}
+.email-table th, .email-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+.email-table th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+}
+.email-h2 {
+    font-family: sans-serif;
+    color: #333;
+    text-align: center;
+    margin-top: 30px;
+    margin-bottom: 10px;
+}
+.email-center {
+    text-align: center;
+    margin: 20px 0;
+}
 </style>
 """)
 
 
+# --- Funções do GitHub e Processamento de Dados (sem mudanças) ---
 @st.cache_resource
 def get_github_repo():
+    # ... (sem mudanças) ...
     try:
         expected_repo_name = st.secrets.get("EXPECTED_REPO")
         if not expected_repo_name:
@@ -96,26 +133,28 @@ def get_github_repo():
         st.stop()
 
 def update_github_file(_repo, file_path, file_content, commit_message):
+    # ... (sem mudanças) ...
     try:
         contents = _repo.get_contents(file_path)
         if isinstance(file_content, str):
             file_content = file_content.encode('utf-8')
         _repo.update_file(contents.path, commit_message, file_content, contents.sha)
-        if file_path not in ["contacted_tickets.json", "ticket_observations.json", "datas_referencia.txt"]: # Evitar spam de msg
+        if file_path not in ["contacted_tickets.json", "ticket_observations.json", "datas_referencia.txt"]:
             st.sidebar.info(f"Arquivo '{file_path}' atualizado.")
     except GithubException as e:
         if e.status == 404:
             if isinstance(file_content, str):
                 file_content = file_content.encode('utf-8')
             _repo.create_file(file_path, commit_message, file_content)
-            if file_path not in ["contacted_tickets.json", "ticket_observations.json", "datas_referencia.txt"]: # Evitar spam de msg
+            if file_path not in ["contacted_tickets.json", "ticket_observations.json", "datas_referencia.txt"]:
                 st.sidebar.info(f"Arquivo '{file_path}' criado.")
         else:
             st.sidebar.error(f"Falha ao salvar '{file_path}': {e}")
-            raise # Re-levanta a exceção para o bloco superior tratar
+            raise
 
 @st.cache_data(ttl=300)
 def read_github_file(_repo, file_path):
+    # ... (sem mudanças) ...
     try:
         content_file = _repo.get_contents(file_path)
         content_bytes = content_file.decoded_content
@@ -160,6 +199,7 @@ def read_github_file(_repo, file_path):
 
 @st.cache_data(ttl=300)
 def read_github_text_file(_repo, file_path):
+    # ... (sem mudanças) ...
     try:
         content_file = _repo.get_contents(file_path)
         content = content_file.decoded_content.decode("utf-8")
@@ -170,7 +210,7 @@ def read_github_text_file(_repo, file_path):
                 dates[key.strip()] = value.strip()
         return dates
     except GithubException as e:
-        if e.status == 404: # Arquivo pode não existir na primeira vez
+        if e.status == 404:
             return {}
         else:
             st.warning(f"Erro ao ler {file_path}: {e}")
@@ -182,6 +222,7 @@ def read_github_text_file(_repo, file_path):
 
 @st.cache_data(ttl=300)
 def read_github_json_dict(_repo, file_path):
+    # ... (sem mudanças) ...
     try:
         file_content = _repo.get_contents(file_path).decoded_content.decode("utf-8")
         return json.loads(file_content) if file_content else {}
@@ -197,6 +238,7 @@ def read_github_json_dict(_repo, file_path):
         return {}
 
 def process_uploaded_file(uploaded_file):
+    # ... (sem mudanças) ...
     if uploaded_file is None:
         return None
     try:
@@ -221,6 +263,7 @@ def process_uploaded_file(uploaded_file):
         return None
 
 def processar_dados_comparativos(df_atual, df_15dias):
+    # ... (sem mudanças) ...
     contagem_atual = df_atual.groupby('Atribuir a um grupo').size().reset_index(name='Atual')
     contagem_15dias = df_15dias.groupby('Atribuir a um grupo').size().reset_index(name='15 Dias Atrás')
     df_comparativo = pd.merge(contagem_atual, contagem_15dias, on='Atribuir a um grupo', how='outer').fillna(0)
@@ -230,6 +273,7 @@ def processar_dados_comparativos(df_atual, df_15dias):
 
 @st.cache_data
 def categorizar_idade_vetorizado(dias_series):
+    # ... (sem mudanças) ...
     condicoes = [
         dias_series >= 30, (dias_series >= 21) & (dias_series <= 29),
         (dias_series >= 11) & (dias_series <= 20), (dias_series >= 6) & (dias_series <= 10),
@@ -240,6 +284,7 @@ def categorizar_idade_vetorizado(dias_series):
 
 @st.cache_data
 def analisar_aging(_df_atual):
+    # ... (sem mudanças) ...
     df = _df_atual.copy()
     date_col_name = None
     if 'Data de criação' in df.columns: date_col_name = 'Data de criação'
@@ -260,12 +305,14 @@ def analisar_aging(_df_atual):
     return df
 
 def get_status(row):
+    # ... (sem mudanças) ...
     diferenca = row['Diferença']
     if diferenca > 0: return "Alta Demanda"
     elif diferenca == 0: return "Estável / Atenção"
     else: return "Redução de Backlog"
 
 def get_image_as_base64(path):
+    # ... (sem mudanças) ...
     try:
         with open(path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode()
@@ -273,6 +320,7 @@ def get_image_as_base64(path):
         return None
 
 def sync_ticket_data():
+    # ... (sem mudanças) ...
     if 'ticket_editor' not in st.session_state or not st.session_state.ticket_editor.get('edited_rows'):
         return
     edited_rows = st.session_state.ticket_editor['edited_rows']
@@ -313,9 +361,9 @@ def sync_ticket_data():
     st.session_state.ticket_editor['edited_rows'] = {}
     st.session_state.scroll_to_details = True
 
-
 @st.cache_data(ttl=3600)
 def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7):
+    # ... (sem mudanças) ...
     try:
         all_files_content = _repo.get_contents("snapshots")
         all_files = [f.path for f in all_files_content]
@@ -370,6 +418,7 @@ def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7)
 
 @st.cache_data(ttl=300)
 def find_closest_snapshot_before(_repo, current_report_date, target_date):
+    # ... (sem mudanças) ...
     try:
         all_files_content = _repo.get_contents("snapshots")
         snapshots = []
@@ -394,6 +443,7 @@ def find_closest_snapshot_before(_repo, current_report_date, target_date):
 
 @st.cache_data(ttl=3600)
 def carregar_evolucao_aging(_repo, closed_ticket_ids_list, dias_para_analisar=90):
+    # ... (sem mudanças) ...
     try:
         all_files_content = _repo.get_contents("snapshots")
         all_files = [f.path for f in all_files_content]
@@ -477,6 +527,7 @@ def carregar_evolucao_aging(_repo, closed_ticket_ids_list, dias_para_analisar=90
         return pd.DataFrame()
 
 def formatar_delta_card(delta_abs, delta_perc, valor_comparacao, data_comparacao_str):
+    # ... (sem mudanças) ...
     delta_abs = int(delta_abs)
     if valor_comparacao > 0:
         delta_perc_str = f"{delta_perc * 100:.1f}%"
@@ -499,6 +550,7 @@ def formatar_delta_card(delta_abs, delta_perc, valor_comparacao, data_comparacao
 
 
 def lighten_color(hex_color, amount=0.2):
+    # ... (sem mudanças) ...
     try:
         hex_color = hex_color.lstrip('#')
         h, l, s = colorsys.rgb_to_hls(*[int(hex_color[i:i+2], 16)/255.0 for i in (0, 2, 4)])
@@ -508,6 +560,7 @@ def lighten_color(hex_color, amount=0.2):
     except Exception: return hex_color
 
 
+# --- Funções para Desenhar KPIs com Pillow (usadas no Email/.eml) ---
 try:
     FONT_LABEL = ImageFont.truetype("Roboto-Regular.ttf", 16)
     FONT_VALUE = ImageFont.truetype("Roboto-Bold.ttf", 36)
@@ -515,7 +568,7 @@ try:
     FONT_TITULO_SECAO = ImageFont.truetype("Roboto-Bold.ttf", 24)
     FONT_PLACEHOLDER = ImageFont.truetype("Roboto-Regular.ttf", 20)
 except IOError:
-    st.warning("Arquivos de fonte (Roboto-Regular.ttf, Roboto-Bold.ttf) não encontrados. A qualidade do PNG pode ser baixa.")
+    st.warning("Arquivos de fonte (Roboto-Regular.ttf, Roboto-Bold.ttf) não encontrados. A qualidade das imagens no .eml pode ser baixa.")
     FONT_LABEL = ImageFont.load_default()
     FONT_VALUE = ImageFont.load_default()
     FONT_DELTA = ImageFont.load_default()
@@ -538,77 +591,62 @@ CARD_HEIGHT = 120
 CARD_PADDING = 10
 
 def _desenhar_card(draw, x_offset, y_offset, label, value_str, delta_str="", delta_class="delta-neutral"):
+    # ... (sem mudanças) ...
     """Função auxiliar para desenhar um único card no estilo metric-box."""
     draw.rectangle(
         (x_offset, y_offset, x_offset + CARD_WIDTH, y_offset + CARD_HEIGHT),
         outline=COLOR_BORDER, fill=COLOR_BACKGROUND
     )
-    
     label_bbox = draw.textbbox((0, 0), label, font=FONT_LABEL)
     value_bbox = draw.textbbox((0, 0), value_str, font=FONT_VALUE)
-    
     label_x = x_offset + (CARD_WIDTH - (label_bbox[2] - label_bbox[0])) / 2
     value_x = x_offset + (CARD_WIDTH - (value_bbox[2] - value_bbox[0])) / 2
-    
     total_text_height = (label_bbox[3] - label_bbox[1]) + (value_bbox[3] - value_bbox[1]) + 5
     if delta_str:
         total_text_height += 15
-    
     current_y = y_offset + (CARD_HEIGHT - total_text_height) / 2
-    
     draw.text((label_x, current_y), label, font=FONT_LABEL, fill=COLOR_LABEL)
     current_y += (label_bbox[3] - label_bbox[1]) + 5
-    
     draw.text((value_x, current_y), value_str, font=FONT_VALUE, fill=COLOR_VALUE)
     current_y += (value_bbox[3] - value_bbox[1]) + 5
-    
     if delta_str:
         delta_bbox = draw.textbbox((0, 0), delta_str, font=FONT_DELTA)
         delta_x = x_offset + (CARD_WIDTH - (delta_bbox[2] - delta_bbox[0])) / 2
-        
         if delta_class == "delta-positive": delta_color = COLOR_DELTA_POS
         elif delta_class == "delta-negative": delta_color = COLOR_DELTA_NEG
         else: delta_color = COLOR_DELTA_NEU
-            
         draw.text((delta_x, current_y), delta_str, font=FONT_DELTA, fill=delta_color)
 
 def _criar_imagem_kpis_topo(total_aberto, total_fechado, data_atual, hora_atual):
+    # ... (sem mudanças) ...
     """Cria os dois KPIs principais: Total Aberto e Fechados no Dia."""
     img_width = CARD_WIDTH * 2 + CARD_PADDING * 3
     img_height = CARD_HEIGHT + CARD_PADDING * 2
-    
     img = Image.new('RGB', (img_width, img_height), color=COLOR_BACKGROUND)
     draw = ImageDraw.Draw(img)
-    
     data_str = f"Data: {data_atual} (às {hora_atual})" if hora_atual else f"Data: {data_atual}"
-    
     _desenhar_card(draw, CARD_PADDING, CARD_PADDING,
                    "Total de Chamados Abertos",
                    str(total_aberto),
                    data_str,
                    "delta-neutral")
-    
     valor_fechados_str = str(total_fechado) if total_fechado > 0 else "N/A"
     _desenhar_card(draw, CARD_WIDTH + CARD_PADDING * 2, CARD_PADDING,
                    "Chamados Fechados no Dia",
                    valor_fechados_str)
-                   
     return img
 
 def _criar_imagem_kpis_aging(aging_counts_df):
+    # ... (sem mudanças) ...
     """Cria os 6 cards das faixas de antiguidade (da tab1)."""
     img_width = CARD_WIDTH * 3 + CARD_PADDING * 4
     img_height = (CARD_HEIGHT * 2) + (CARD_PADDING * 3)
-    
     img = Image.new('RGB', (img_width, img_height), color=COLOR_BACKGROUND)
     draw = ImageDraw.Draw(img)
-    
     x_pos = [CARD_PADDING, CARD_WIDTH + CARD_PADDING * 2, CARD_WIDTH * 2 + CARD_PADDING * 3]
     y_pos = [CARD_PADDING, CARD_HEIGHT + CARD_PADDING * 2]
-    
     col = 0
     row = 0
-    
     for _, r in aging_counts_df.iterrows():
         _desenhar_card(draw, x_pos[col], y_pos[row],
                        r['Faixa de Antiguidade'],
@@ -617,45 +655,37 @@ def _criar_imagem_kpis_aging(aging_counts_df):
         if col > 2:
             col = 0
             row += 1
-            
     return img
 
 def _criar_imagem_kpis_comparativo_aging(hoje_counts_df, df_comparacao_dados, data_comparacao_str, ordem_faixas, formatar_delta_card_func):
+    # ... (sem mudanças) ...
     """Cria os 6 cards de comparativo de aging (da tab4)."""
     img_width = CARD_WIDTH * 3 + CARD_PADDING * 4
     img_height = (CARD_HEIGHT * 2) + (CARD_PADDING * 3)
-    
     img = Image.new('RGB', (img_width, img_height), color=COLOR_BACKGROUND)
     draw = ImageDraw.Draw(img)
-    
     x_pos = [CARD_PADDING, CARD_WIDTH + CARD_PADDING * 2, CARD_WIDTH * 2 + CARD_PADDING * 3]
     y_pos = [CARD_PADDING, CARD_HEIGHT + CARD_PADDING * 2]
-    
     col = 0
     row = 0
-    
     for faixa in ordem_faixas:
         valor_hoje = 'N/A'
         if not hoje_counts_df.empty:
             valor_hoje_series = hoje_counts_df.loc[hoje_counts_df['Faixa de Antiguidade'] == faixa, 'total']
             if not valor_hoje_series.empty:
                 valor_hoje = int(valor_hoje_series.iloc[0])
-
         valor_comparacao = 0
         delta_text = "N/A"
         delta_class = "delta-neutral"
-
         if data_comparacao_str != "N/A" and not df_comparacao_dados.empty and isinstance(valor_hoje, int):
             valor_comp_series = df_comparacao_dados.loc[df_comparacao_dados['Faixa de Antiguidade'] == faixa, 'total']
             if not valor_comp_series.empty:
                 valor_comparacao = int(valor_comp_series.iloc[0])
-
             delta_abs = valor_hoje - valor_comparacao
             delta_perc = (delta_abs / valor_comparacao) if valor_comparacao > 0 else 0
             delta_text, delta_class = formatar_delta_card_func(delta_abs, delta_perc, valor_comparacao, data_comparacao_str)
         elif isinstance(valor_hoje, int):
             delta_text = "Sem dados para comparar"
-
         _desenhar_card(draw, x_pos[col], y_pos[row],
                        faixa,
                        str(valor_hoje),
@@ -665,38 +695,17 @@ def _criar_imagem_kpis_comparativo_aging(hoje_counts_df, df_comparacao_dados, da
         if col > 2:
             col = 0
             row += 1
-            
     return img
 
-def _add_titulo_secao(draw, titulo, y_pos, img_width):
-    """Desenha um título de seção centralizado."""
-    bbox = draw.textbbox((0, 0), titulo, font=FONT_TITULO_SECAO)
-    x_pos = (img_width - (bbox[2] - bbox[0])) / 2
-    draw.text((x_pos, y_pos), titulo, font=FONT_TITULO_SECAO, fill=COLOR_TITULO_SECAO)
-    return y_pos + (bbox[3] - bbox[1]) + 20
+def img_to_bytes(img):
+    """Converte uma imagem Pillow para bytes PNG."""
+    img_buffer = BytesIO()
+    img.save(img_buffer, format="PNG")
+    img_buffer.seek(0)
+    return img_buffer.getvalue()
 
-def _criar_imagem_placeholder(titulo_secao, width=1200, height=450):
-    """Cria uma imagem de placeholder para gráficos sem dados."""
-    img = Image.new('RGB', (width, height), color=COLOR_PLACEHOLDER_BG)
-    draw = ImageDraw.Draw(img)
-    
-    texto = "Gráfico indisponível (sem dados históricos)"
-    
-    bbox_titulo = draw.textbbox((0,0), titulo_secao, font=FONT_PLACEHOLDER)
-    bbox_texto = draw.textbbox((0,0), texto, font=FONT_PLACEHOLDER)
-    
-    x_titulo = (width - (bbox_titulo[2] - bbox_titulo[0])) / 2
-    y_titulo = (height / 2) - (bbox_titulo[3] - bbox_titulo[1]) - 10
-    
-    x_texto = (width - (bbox_texto[2] - bbox_texto[0])) / 2
-    y_texto = (height / 2) + 10
-    
-    draw.text((x_titulo, y_titulo), titulo_secao, font=FONT_PLACEHOLDER, fill=COLOR_PLACEHOLDER_TEXT)
-    draw.text((x_texto, y_texto), texto, font=FONT_PLACEHOLDER, fill=COLOR_PLACEHOLDER_TEXT)
-    
-    return img
-
-def gerar_relatorio_png(
+# --- Função para Gerar Conteúdo HTML (mantida da versão anterior) ---
+def gerar_conteudo_email_html(
     fig_composicao_grupo,
     total_aberto, total_fechados, data_atual, hora_atual,
     df_aging_counts,
@@ -705,98 +714,114 @@ def gerar_relatorio_png(
     hoje_counts_df, df_comparacao_dados, data_comparacao_str, ordem_faixas, formatar_delta_card_func,
     fig_evol_7_dias
 ):
-    """
-    Gera o relatório PNG.
-    Verifica se os gráficos têm dados e usa scale=2 para alta resolução.
-    """
+    """Gera o corpo HTML do email/eml e os dados das imagens para anexar."""
+    # ... (sem mudanças, continua gerando HTML e dict de imagens) ...
+    html_parts = []
+    images_to_attach = {} # Dicionário { 'cid': image_bytes }
+
+    html_parts.append("<html><head><style>")
+    html_parts.append("""
+        .email-table { border-collapse: collapse; width: 90%; margin: 20px auto; font-family: sans-serif; }
+        .email-table th, .email-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .email-table th { background-color: #f2f2f2; font-weight: bold; }
+        .email-h2 { font-family: sans-serif; color: #333; text-align: center; margin-top: 30px; margin-bottom: 10px; }
+        .email-center { text-align: center; margin: 20px 0; }
+        svg { max-width: 100%; height: auto; }
+    """)
+    html_parts.append("</style></head><body>")
+    html_parts.append(f"<h1 style='text-align:center; font-family: sans-serif;'>Relatório Backlog - {data_atual}</h1>")
+
+    html_parts.append("<h2 class='email-h2'>Cards Principais</h2>")
+    try:
+        img_kpis_topo = _criar_imagem_kpis_topo(total_aberto, total_fechados, data_atual, hora_atual)
+        img_bytes = img_to_bytes(img_kpis_topo)
+        cid = f"kpis_topo_{uuid.uuid4()}"
+        images_to_attach[cid] = img_bytes
+        html_parts.append(f"<div class='email-center'><img src='cid:{cid}'></div>")
+    except Exception as e:
+        html_parts.append(f"<p style='color:red; text-align:center;'>Erro ao gerar KPIs do topo: {e}</p>")
+
+    html_parts.append("<h2 class='email-h2'>Cards de Antiguidade</h2>")
+    try:
+        img_kpis_aging = _criar_imagem_kpis_aging(df_aging_counts)
+        img_bytes = img_to_bytes(img_kpis_aging)
+        cid = f"kpis_aging_{uuid.uuid4()}"
+        images_to_attach[cid] = img_bytes
+        html_parts.append(f"<div class='email-center'><img src='cid:{cid}'></div>")
+    except Exception as e:
+        html_parts.append(f"<p style='color:red; text-align:center;'>Erro ao gerar KPIs de antiguidade: {e}</p>")
+
+    graph_configs = [
+        ("Composição da Idade do Backlog por Grupo", fig_composicao_grupo),
+        ("Evolução do Total Geral", fig_evol_geral),
+        ("Evolução por Grupo", fig_evol_grupo),
+        ("Evolução do Aging (Últimos 7 dias)", fig_evol_7_dias),
+    ]
+
+    for title, fig in graph_configs:
+        html_parts.append(f"<h2 class='email-h2'>{title}</h2>")
+        if fig and fig.data:
+            try:
+                svg_str = fig.to_svg(validate=False)
+                html_parts.append(f"<div class='email-center'>{svg_str}</div>")
+            except Exception as e:
+                st.warning(f"Falha ao gerar SVG para '{title}': {e}")
+                html_parts.append(f"<p style='text-align:center; color:orange;'>[Visualização do gráfico indisponível - Falha na exportação SVG: {e}]</p>")
+        else:
+            html_parts.append("<p style='text-align:center; color:grey;'>[Gráfico indisponível (sem dados históricos)]</p>")
+
+    html_parts.append("<h2 class='email-h2'>Comparativo de Antiguidade (Hoje vs. 7 dias)</h2>")
+    try:
+        img_kpis_comp_aging = _criar_imagem_kpis_comparativo_aging(
+            hoje_counts_df, df_comparacao_dados, data_comparacao_str, ordem_faixas, formatar_delta_card_func
+        )
+        img_bytes = img_to_bytes(img_kpis_comp_aging)
+        cid = f"kpis_comp_aging_{uuid.uuid4()}"
+        images_to_attach[cid] = img_bytes
+        html_parts.append(f"<div class='email-center'><img src='cid:{cid}'></div>")
+    except Exception as e:
+         html_parts.append(f"<p style='color:red; text-align:center;'>Erro ao gerar KPIs comparativos: {e}</p>")
+
+    html_parts.append("</body></html>")
     
-    lista_imagens_pillow = []
-    
-    img_kpis_topo = _criar_imagem_kpis_topo(total_aberto, total_fechados, data_atual, hora_atual)
-    lista_imagens_pillow.append(("Cards Principais", img_kpis_topo))
+    return "".join(html_parts), images_to_attach
 
-    img_kpis_aging = _criar_imagem_kpis_aging(df_aging_counts)
-    lista_imagens_pillow.append(("Cards de Antiguidade", img_kpis_aging))
+# --- Nova Função para Gerar Arquivo .eml ---
+def gerar_arquivo_eml(subject, html_body, images_to_attach):
+    """Cria o conteúdo de um arquivo .eml como bytes."""
+    try:
+        # Criar a mensagem
+        message = MIMEMultipart('related') # 'related' para imagens inline
+        message['Subject'] = subject
+        # Adicionar cabeçalhos básicos para o arquivo .eml
+        message['From'] = "relatorio@dashboard.com" # Remetente genérico
+        message['To'] = "destinatario@exemplo.com" # Destinatário genérico
+        message['Date'] = datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")
+        message['MIME-Version'] = "1.0"
 
-    titulo_secao_3 = "Composição da Idade do Backlog por Grupo"
-    if fig_composicao_grupo and fig_composicao_grupo.data:
-        try:
-            img_data = fig_composicao_grupo.to_image(format="png", width=1200, height=600, engine="kaleido", scale=2)
-            lista_imagens_pillow.append((titulo_secao_3, Image.open(BytesIO(img_data))))
-        except Exception as e:
-            st.warning(f"Erro ao exportar '{titulo_secao_3}': {e}")
-            lista_imagens_pillow.append((titulo_secao_3, _criar_imagem_placeholder(titulo_secao_3, height=600)))
-    else:
-        lista_imagens_pillow.append((titulo_secao_3, _criar_imagem_placeholder(titulo_secao_3, height=600)))
+        # Anexar parte HTML
+        message.attach(MIMEText(html_body, 'html', 'utf-8')) # Especificar utf-8
 
-    titulo_secao_4 = "Evolução do Total Geral"
-    if fig_evol_geral and fig_evol_geral.data:
-        try:
-            img_data = fig_evol_geral.to_image(format="png", width=1200, height=450, engine="kaleido", scale=2)
-            lista_imagens_pillow.append((titulo_secao_4, Image.open(BytesIO(img_data))))
-        except Exception as e:
-            st.warning(f"Erro ao exportar '{titulo_secao_4}': {e}")
-            lista_imagens_pillow.append((titulo_secao_4, _criar_imagem_placeholder(titulo_secao_4, height=450)))
-    else:
-        lista_imagens_pillow.append((titulo_secao_4, _criar_imagem_placeholder(titulo_secao_4, height=450)))
-
-    titulo_secao_5 = "Evolução por Grupo"
-    if fig_evol_grupo and fig_evol_grupo.data:
-        try:
-            img_data = fig_evol_grupo.to_image(format="png", width=1200, height=600, engine="kaleido", scale=2)
-            lista_imagens_pillow.append((titulo_secao_5, Image.open(BytesIO(img_data))))
-        except Exception as e:
-            st.warning(f"Erro ao exportar '{titulo_secao_5}': {e}")
-            lista_imagens_pillow.append((titulo_secao_5, _criar_imagem_placeholder(titulo_secao_5, height=600)))
-    else:
-        lista_imagens_pillow.append((titulo_secao_5, _criar_imagem_placeholder(titulo_secao_5, height=600)))
-
-    img_kpis_comp_aging = _criar_imagem_kpis_comparativo_aging(
-        hoje_counts_df, df_comparacao_dados, data_comparacao_str, ordem_faixas, formatar_delta_card_func
-    )
-    lista_imagens_pillow.append(("Comparativo de Antiguidade (Hoje vs. 7 dias)", img_kpis_comp_aging))
-
-    titulo_secao_7 = "Evolução do Aging (Últimos 7 dias)"
-    if fig_evol_7_dias and fig_evol_7_dias.data:
-        try:
-            img_data = fig_evol_7_dias.to_image(format="png", width=1200, height=500, engine="kaleido", scale=2)
-            lista_imagens_pillow.append((titulo_secao_7, Image.open(BytesIO(img_data))))
-        except Exception as e:
-            st.warning(f"Erro ao exportar '{titulo_secao_7}': {e}")
-            lista_imagens_pillow.append((titulo_secao_7, _criar_imagem_placeholder(titulo_secao_7, height=500)))
-    else:
-        lista_imagens_pillow.append((titulo_secao_7, _criar_imagem_placeholder(titulo_secao_7, height=500)))
-
-    
-    max_width = 0
-    for _, img in lista_imagens_pillow:
-        if img.width > max_width:
-            max_width = img.width
-    if max_width < 1200: max_width = 1200 
-
-    total_height = 0
-    padding_vertical = 50 
-    for _ in lista_imagens_pillow:
-        total_height += padding_vertical + 40
+        # Anexar imagens
+        for cid, img_bytes in images_to_attach.items():
+            img = MIMEImage(img_bytes)
+            img.add_header('Content-ID', f'<{cid}>')
+            # Adicionar Content-Disposition pode ajudar alguns clientes de email
+            img.add_header('Content-Disposition', 'inline', filename=f'{cid}.png')
+            message.attach(img)
+            
+        # Converter a mensagem completa para bytes
+        eml_bytes = message.as_bytes()
         
-    total_height += sum(img.height for _, img in lista_imagens_pillow)
-    
-    report_image = Image.new('RGB', (max_width, total_height), color=COLOR_BACKGROUND)
-    draw = ImageDraw.Draw(report_image)
-    
-    current_y = padding_vertical
-    
-    for titulo, img in lista_imagens_pillow:
-        current_y = _add_titulo_secao(draw, titulo, current_y, max_width)
-        img_x_pos = (max_width - img.width) // 2
-        report_image.paste(img, (img_x_pos, current_y))
-        current_y += img.height + padding_vertical
+        # Retornar como BytesIO para st.download_button
+        return BytesIO(eml_bytes)
 
-    img_buffer = BytesIO()
-    report_image.save(img_buffer, format="PNG")
-    img_buffer.seek(0)
-    
-    return img_buffer
+    except Exception as e:
+        st.error(f"Erro ao gerar o arquivo .eml: {e}")
+        st.exception(e)
+        return None
+
+# --- Fim das Novas Funções ---
 
 
 logo_copa_b64 = get_image_as_base64("logo_sidebar.png")
@@ -814,6 +839,7 @@ password = st.sidebar.text_input("Senha para atualizar dados:", type="password")
 is_admin = password == st.secrets.get("ADMIN_PASSWORD", "")
 
 if is_admin:
+    # ... (Bloco Admin sem mudanças) ...
     st.sidebar.success("Acesso de administrador liberado.")
     st.sidebar.subheader("Atualização Completa")
     uploaded_file_atual = st.sidebar.file_uploader("1. Backlog ATUAL", type=["csv", "xlsx"], key="uploader_atual")
@@ -860,19 +886,14 @@ if is_admin:
                 if content_fechados is not None:
                     try:
                         update_github_file(repo, "dados_fechados.csv", content_fechados, commit_msg)
-
-                        # --- INÍCIO DA MODIFICAÇÃO v0.9.30 ---
                         datas_existentes = read_github_text_file(repo, "datas_referencia.txt")
                         data_atual_existente = datas_existentes.get('data_atual', 'N/A')
                         data_15dias_existente = datas_existentes.get('data_15dias', 'N/A')
                         hora_atualizacao_nova = now_sao_paulo.strftime('%H:%M')
-
                         datas_referencia_content_novo = (f"data_atual:{data_atual_existente}\n"
                                                        f"data_15dias:{data_15dias_existente}\n"
                                                        f"hora_atualizacao:{hora_atualizacao_nova}")
                         update_github_file(repo, "datas_referencia.txt", datas_referencia_content_novo.encode('utf-8'), commit_msg)
-                        # --- FIM DA MODIFICAÇÃO v0.9.30 ---
-
                         st.cache_data.clear()
                         st.cache_resource.clear()
                         st.sidebar.success("Arquivo de fechados salvo e hora atualizada! Recarregando...")
@@ -933,6 +954,7 @@ try:
     df_encerrados_filtrado = df_encerrados[~df_encerrados['Atribuir a um grupo'].str.contains('RH', case=False, na=False)]
 
     
+    # --- Pré-cálculo dos dados e gráficos (sem mudanças) ---
     total_chamados = len(df_aging) if not df_aging.empty else 0
     total_fechados = len(df_encerrados_filtrado)
     ordem_faixas = ["0-2 dias", "3-5 dias", "6-10 dias", "11-20 dias", "21-29 dias", "30+ dias"]
@@ -947,7 +969,7 @@ try:
     else:
         aging_counts = pd.DataFrame({'Faixa de Antiguidade': ordem_faixas, 'Quantidade': 0})
 
-    fig_stacked_bar_para_png = go.Figure()
+    fig_stacked_bar_para_relatorio = go.Figure() # Renomeado para clareza
     chart_data = pd.DataFrame()
     sorted_new_labels = []
     color_map = {}
@@ -962,15 +984,15 @@ try:
         palette = [ lighten_color(base_color, 0.85), lighten_color(base_color, 0.70), lighten_color(base_color, 0.55), lighten_color(base_color, 0.40), lighten_color(base_color, 0.20), base_color ]
         color_map = {faixa: color for faixa, color in zip(ordem_faixas, palette)}
         
-        fig_stacked_bar_para_png = px.bar( 
+        fig_stacked_bar_para_relatorio = px.bar( 
             chart_data, x='Atribuir a um grupo (com total)', y='Quantidade', color='Faixa de Antiguidade', 
             title="Composição da Idade do Backlog por Grupo", 
             labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo (com total)': 'Grupo'}, 
             category_orders={'Atribuir a um grupo (com total)': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas}, 
             color_discrete_map=color_map, text_auto=True 
         )
-        fig_stacked_bar_para_png.update_traces(textangle=0, textfont_size=12)
-        fig_stacked_bar_para_png.update_layout(height=600, xaxis_title=None, xaxis_tickangle=-45, legend_title_text='Antiguidade')
+        fig_stacked_bar_para_relatorio.update_traces(textangle=0, textfont_size=12)
+        fig_stacked_bar_para_relatorio.update_layout(height=600, xaxis_title=None, xaxis_tickangle=-45, legend_title_text='Antiguidade')
 
     dias_evolucao_default = 7 
     df_evolucao_tab3 = carregar_dados_evolucao(repo, closed_ticket_ids_list=closed_ticket_ids, dias_para_analisar=dias_evolucao_default)
@@ -996,7 +1018,7 @@ try:
             )
             fig_total_evolucao.update_layout(height=400)
 
-            df_evolucao_tab3_sorted = df_evolucao_tab3.sort_values('Data').copy() # Correção SettingWithCopyWarning
+            df_evolucao_tab3_sorted = df_evolucao_tab3.sort_values('Data').copy()
             df_evolucao_tab3_sorted['Data (Eixo)'] = df_evolucao_tab3_sorted['Data'].dt.strftime('%d/%m')
             ordem_datas_grupo = df_evolucao_tab3_sorted['Data (Eixo)'].unique().tolist()
             df_filtrado_display = df_evolucao_tab3_sorted.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
@@ -1056,7 +1078,7 @@ try:
             df_filtrado_grafico = df_combinado[df_combinado['data'].dt.date >= data_inicio_filtro_grafico].copy()
 
             if not df_filtrado_grafico.empty:
-                df_grafico = df_filtrado_grafico.sort_values(by='data').copy() # Correção SettingWithCopyWarning
+                df_grafico = df_filtrado_grafico.sort_values(by='data').copy()
                 df_grafico['Data (Eixo)'] = df_grafico['data'].dt.strftime('%d/%m')
                 ordem_datas_grafico = df_grafico['Data (Eixo)'].unique().tolist()
                 
@@ -1076,9 +1098,10 @@ try:
         st.error(f"Ocorreu um erro ao pré-calcular dados da Tab4: {e_tab4}")
     
     
-    tab1, tab2, tab3, tab4 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal", "Evolução Aging"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Dashboard Completo", "Report Visual & Download", "Evolução Semanal", "Evolução Aging"]) # Renomeado Tab2
 
     with tab1:
+        # ... (Código da Tab1 sem mudanças) ...
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
         if not df_encerrados.empty:
             info_messages.append(f"- **{len(df_encerrados_filtrado)} chamados fechados no dia** (exceto RH) foram deduzidos das contagens principais.")
@@ -1165,14 +1188,15 @@ try:
                 st.data_editor(resultados_busca[[col for col in colunas_para_exibir_busca if col in resultados_busca.columns]], width='stretch', hide_index=True, disabled=True)
 
     with tab2:
-        st.subheader("Gerar Relatório Unificado em PNG")
-        st.markdown("Este recurso compila os principais indicadores e gráficos do dashboard em uma **única imagem PNG** para fácil compartilhamento.")
-        
-        if st.button("Gerar Relatório PNG de 1 Página", width='stretch'):
-            with st.spinner("Gerando seu relatório... isso pode levar alguns segundos..."):
+        st.subheader("Baixar Relatório em Formato Email (.eml)")
+        st.markdown("Este recurso compila os principais indicadores e gráficos do dashboard em um **arquivo `.eml`**. Abra este arquivo com seu programa de email (Outlook, etc.) para visualizá-lo como um email formatado.")
+
+        if st.button("Gerar e Baixar Arquivo .eml", width='stretch'):
+            with st.spinner("Gerando o arquivo do relatório..."):
                 try:
-                    report_png_buffer = gerar_relatorio_png(
-                        fig_composicao_grupo=fig_stacked_bar_para_png,
+                    # Gerar conteúdo HTML e imagens
+                    email_html, imagens_anexas = gerar_conteudo_email_html(
+                        fig_composicao_grupo=fig_stacked_bar_para_relatorio,
                         total_aberto=total_chamados,
                         total_fechados=total_fechados,
                         data_atual=data_atual_str,
@@ -1180,74 +1204,84 @@ try:
                         df_aging_counts=aging_counts,
                         fig_evol_geral=fig_total_evolucao,
                         fig_evol_grupo=fig_evolucao_grupo,
-                        hoje_counts_df=hoje_counts_df, 
+                        hoje_counts_df=hoje_counts_df,
                         df_comparacao_dados=df_comparacao_dados_7dias,
-                        data_comparacao_str=data_comparacao_str_7dias, 
-                        ordem_faixas=ordem_faixas_scaffold, 
+                        data_comparacao_str=data_comparacao_str_7dias,
+                        ordem_faixas=ordem_faixas_scaffold,
                         formatar_delta_card_func=formatar_delta_card,
                         fig_evol_7_dias=fig_aging_all
                     )
-                    
-                    st.success("Relatório gerado!")
-                    st.download_button(
-                        label="Baixar Relatório PNG",
-                        data=report_png_buffer,
-                        file_name=f"relatorio_backlog_{date.today().strftime('%Y-%m-%d')}.png",
-                        mime="image/png",
-                        key="download_png_report"
-                    )
+
+                    # Criar o arquivo .eml em memória
+                    assunto_email = f"Relatório Backlog Copa Energia + Belago - {data_atual_str}"
+                    eml_file_buffer = gerar_arquivo_eml(assunto_email, email_html, imagens_anexas)
+
+                    if eml_file_buffer:
+                        st.success("Arquivo .eml gerado!")
+                        st.download_button(
+                            label="Baixar Relatório (.eml)",
+                            data=eml_file_buffer,
+                            file_name=f"relatorio_backlog_{date.today().strftime('%Y-%m-%d')}.eml",
+                            mime="message/rfc822", # Mime type para arquivos .eml
+                            key="download_eml_report"
+                        )
+                    # Se gerar_arquivo_eml retornar None, um erro já foi mostrado dentro da função
+
                 except Exception as e:
-                    st.error(f"Erro ao gerar o relatório: {e}")
+                    st.error(f"Erro inesperado durante a geração do arquivo .eml: {e}")
                     st.exception(e)
 
         st.markdown("---")
 
-        st.subheader("Resumo do Backlog Atual")
+        # Conteúdo visual original da Tab2
+        st.subheader("Resumo Visual do Backlog Atual")
         if not df_aging.empty:
             _, col_total_tab2, _ = st.columns([2, 1.5, 2])
-            with col_total_tab2: 
+            with col_total_tab2:
                 st.markdown( f"""<div class="metric-box"><span class="label">Total de Chamados</span><span class="value">{total_chamados}</span></div>""", unsafe_allow_html=True )
-            
+
             st.markdown("---")
-            
+
             cols_tab2 = st.columns(len(ordem_faixas))
             for i, row in aging_counts.iterrows():
-                with cols_tab2[i]: 
+                with cols_tab2[i]:
                     st.markdown( f"""<div class="metric-box"><span class="label">{row['Faixa de Antiguidade']}</span><span class="value">{row['Quantidade']}</span></div>""", unsafe_allow_html=True )
-            
+
             st.markdown("---")
             st.subheader("Distribuição do Backlog por Grupo")
-            
+
             orientation_choice = st.radio( "Orientação do Gráfico:", ["Vertical", "Horizontal"], index=0, horizontal=True, key="radio_tab2_orient" )
-            
+
             if orientation_choice == 'Horizontal':
                 num_groups = len(sorted_new_labels)
                 dynamic_height = max(500, num_groups * 30)
-                fig_stacked_bar_tab2 = px.bar( 
-                    chart_data, x='Quantidade', y='Atribuir a um grupo (com total)', orientation='h', color='Faixa de Antiguidade', 
-                    title="Composição da Idade do Backlog por Grupo", 
-                    labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo (com total)': ''}, 
-                    category_orders={'Atribuir a um grupo (com total)': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas}, 
-                    color_discrete_map=color_map, text_auto=True 
+                fig_stacked_bar_tab2 = px.bar(
+                    chart_data, x='Quantidade', y='Atribuir a um grupo (com total)', orientation='h', color='Faixa de Antiguidade',
+                    title="Composição da Idade do Backlog por Grupo",
+                    labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo (com total)': ''},
+                    category_orders={'Atribuir a um grupo (com total)': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas},
+                    color_discrete_map=color_map, text_auto=True
                 )
                 fig_stacked_bar_tab2.update_traces(textangle=0, textfont_size=12)
                 fig_stacked_bar_tab2.update_layout(height=dynamic_height, legend_title_text='Antiguidade')
             else:
-                fig_stacked_bar_tab2 = px.bar( 
-                    chart_data, x='Atribuir a um grupo (com total)', y='Quantidade', color='Faixa de Antiguidade', 
-                    title="Composição da Idade do Backlog por Grupo", 
-                    labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo (com total)': 'Grupo'}, 
-                    category_orders={'Atribuir a um grupo (com total)': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas}, 
-                    color_discrete_map=color_map, text_auto=True 
+                fig_stacked_bar_tab2 = px.bar(
+                    chart_data, x='Atribuir a um grupo (com total)', y='Quantidade', color='Faixa de Antiguidade',
+                    title="Composição da Idade do Backlog por Grupo",
+                    labels={'Quantidade': 'Qtd. de Chamados', 'Atribuir a um grupo (com total)': 'Grupo'},
+                    category_orders={'Atribuir a um grupo (com total)': sorted_new_labels, 'Faixa de Antiguidade': ordem_faixas},
+                    color_discrete_map=color_map, text_auto=True
                 )
                 fig_stacked_bar_tab2.update_traces(textangle=0, textfont_size=12)
                 fig_stacked_bar_tab2.update_layout(height=600, xaxis_title=None, xaxis_tickangle=-45, legend_title_text='Antiguidade')
-            
+
             st.plotly_chart(fig_stacked_bar_tab2, use_container_width=True)
         else:
             st.warning("Nenhum dado para gerar o report visual.")
 
+
     with tab3:
+        # ... (Código da Tab3 sem mudanças) ...
         st.subheader("Evolução do Backlog")
         dias_evolucao = st.slider("Ver evolução dos últimos dias:", min_value=7, max_value=30, value=7, key="slider_evolucao")
         df_evolucao_tab3_slider = carregar_dados_evolucao(repo, closed_ticket_ids_list=closed_ticket_ids, dias_para_analisar=dias_evolucao)
@@ -1270,12 +1304,12 @@ try:
                 st.plotly_chart(fig_total_evolucao_slider, use_container_width=True)
                 st.markdown("---")
                 st.info("Esta visualização já filtra os chamados fechados e permite filtrar grupos clicando 2x na legenda.")
-                
-                df_evolucao_tab3_sorted = df_evolucao_tab3_slider.sort_values('Data').copy() # Correção SettingWithCopyWarning
+
+                df_evolucao_tab3_sorted = df_evolucao_tab3_slider.sort_values('Data').copy()
                 df_evolucao_tab3_sorted['Data (Eixo)'] = df_evolucao_tab3_sorted['Data'].dt.strftime('%d/%m')
                 ordem_datas_grupo = df_evolucao_tab3_sorted['Data (Eixo)'].unique().tolist()
                 df_filtrado_display = df_evolucao_tab3_sorted.rename(columns={'Atribuir a um grupo': 'Grupo Atribuído'})
-                
+
                 fig_evolucao_grupo_slider = px.line(
                     df_filtrado_display, x='Data (Eixo)', y='Total Chamados', color='Grupo Atribuído',
                     title='Evolução por Grupo (Apenas Dias de Semana)',
@@ -1290,12 +1324,13 @@ try:
             st.info("Ainda não há dados históricos suficientes.")
 
     with tab4:
+        # ... (Código da Tab4 sem mudanças) ...
         st.subheader("Evolução do Aging do Backlog")
         try:
             if df_combinado.empty:
                 st.error("Não há dados históricos nem dados de hoje para a análise de aging.")
                 st.stop()
-            
+
             st.markdown("##### Comparativo")
             periodo_comp_opts = {
                 "Ontem": 1, "7 dias atrás": 7, "15 dias atrás": 15, "30 dias atrás": 30
@@ -1352,7 +1387,7 @@ try:
             if df_filtrado_grafico.empty:
                 st.warning("Não há dados para o período selecionado.")
             else:
-                df_grafico = df_filtrado_grafico.sort_values(by='data').copy() # Correção SettingWithCopyWarning
+                df_grafico = df_filtrado_grafico.sort_values(by='data').copy()
                 df_grafico['Data (Eixo)'] = df_grafico['data'].dt.strftime('%d/%m')
                 ordem_datas_grafico = df_grafico['Data (Eixo)'].unique().tolist()
                 base_color_aging = "#375623"
@@ -1391,6 +1426,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.30-743 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.30-745 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
