@@ -1,4 +1,4 @@
-# VERSÃO v0.9.20-730 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final + Read UTF-8-SIG)
+# VERSÃO v0.9.20-731 (Base 0.9.7 + Fechados + Observações + Tab3 Eixo Correto + Limpeza NaN + Rodapé + Tab4 Layout Final + Read UTF-8-SIG + Indent Fix 3)
 
 import streamlit as st
 import pandas as pd
@@ -62,7 +62,6 @@ def update_github_file(_repo, file_path, file_content, commit_message):
         else:
             st.sidebar.error(f"Falha ao salvar '{file_path}': {e}")
 
-# --- FUNÇÃO ATUALIZADA para tentar utf-8-sig primeiro ---
 @st.cache_data(ttl=300)
 def read_github_file(_repo, file_path):
     try:
@@ -70,22 +69,18 @@ def read_github_file(_repo, file_path):
         content_bytes = content_file.decoded_content
 
         if not content_bytes:
-            # st.sidebar.warning(f"Arquivo '{file_path}' encontrado no GitHub, mas está vazio.")
             return pd.DataFrame()
 
         content = None
         tried_encodings = []
         try:
-            # --- MODIFICAÇÃO: Tenta utf-8-sig primeiro ---
             content = content_bytes.decode("utf-8-sig")
             tried_encodings.append("utf-8-sig")
         except UnicodeDecodeError:
             try:
-                 # Tenta utf-8 normal como segunda opção
                 content = content_bytes.decode("utf-8")
                 tried_encodings.append("utf-8")
             except UnicodeDecodeError:
-                # Tenta latin-1 como fallback final
                 try:
                     content = content_bytes.decode("latin-1")
                     tried_encodings.append("latin-1")
@@ -99,7 +94,6 @@ def read_github_file(_repo, file_path):
             return pd.DataFrame()
 
         try:
-             # Mesmo após decodificar, usar 'utf-8' aqui é geralmente seguro com pandas
              df = pd.read_csv(StringIO(content), delimiter=';', encoding='utf-8',
                               dtype={'ID do ticket': str, 'ID do Ticket': str}, low_memory=False,
                               on_bad_lines='warn')
@@ -126,7 +120,6 @@ def read_github_file(_repo, file_path):
     except Exception as e:
         st.error(f"Erro inesperado ao ler o arquivo '{file_path}': {e}")
         return pd.DataFrame()
-# --- FIM DA FUNÇÃO ATUALIZADA ---
 
 @st.cache_data(ttl=300)
 def read_github_text_file(_repo, file_path):
@@ -169,31 +162,38 @@ def process_uploaded_file(uploaded_file):
             try:
                 content_bytes = uploaded_file.getvalue()
                 try:
-                    # Tenta ler como UTF-8 SIG primeiro (para lidar com BOM do Excel)
                     content_str = content_bytes.decode('utf-8-sig')
                 except UnicodeDecodeError:
-                    # Tenta UTF-8 normal
                     try:
                         content_str = content_bytes.decode('utf-8')
                     except UnicodeDecodeError:
-                        # Fallback para Latin-1
                         content_str = content_bytes.decode('latin-1')
 
                 sniffer = csv.Sniffer()
+                delimiter = ';' # Default delimiter
                 try:
+                    # Check first few lines for delimiter
                     sample = content_str[:2048]
-                    dialect = sniffer.sniff(sample)
-                    delimiter = dialect.delimiter
-                    if delimiter != ';':
-                        st.sidebar.warning(f"Detectado delimitador '{delimiter}' no arquivo CSV. Usando '{delimiter}'.")
+                    # Check if sample is not empty or just whitespace
+                    if sample and not sample.isspace():
+                        dialect = sniffer.sniff(sample)
+                        delimiter = dialect.delimiter
+                        if delimiter != ';':
+                             st.sidebar.warning(f"Detectado delimitador '{delimiter}' no arquivo CSV. Usando '{delimiter}'.")
+                    else:
+                        # If sample is empty/whitespace, keep default delimiter but maybe warn
+                        st.sidebar.warning("Amostra inicial do CSV vazia ou contém apenas espaços. Usando delimitador ';' por padrão.")
                 except csv.Error:
+                     # If sniffer fails, assume semicolon but allow pandas to try auto-detect later if needed
                     delimiter = None
                     st.sidebar.warning("Não foi possível detectar o delimitador CSV automaticamente. Tentando ';' e auto-detecção.")
 
 
-                df = pd.read_csv(StringIO(content_str), delimiter=delimiter or ';',
-                                 sep=None if delimiter is None else ';',
-                                 dtype=dtype_spec, low_memory=False, on_bad_lines='warn')
+                df = pd.read_csv(StringIO(content_str),
+                                 delimiter=delimiter, # Use detected or default ';'
+                                 sep=None if delimiter is None else EngineError, # Allow pandas fallback if sniffer failed
+                                 dtype=dtype_spec, low_memory=False, on_bad_lines='warn',
+                                 engine='python' if delimiter is None else 'c') # Use python engine for sep=None
 
             except Exception as read_err:
                  st.sidebar.error(f"Erro ao ler o arquivo CSV {uploaded_file.name}: {read_err}")
@@ -203,7 +203,7 @@ def process_uploaded_file(uploaded_file):
         df.dropna(how='all', inplace=True)
 
         output = StringIO()
-        df.to_csv(output, index=False, sep=';', encoding='utf-8') # Salva sempre como UTF-8 sem BOM
+        df.to_csv(output, index=False, sep=';', encoding='utf-8')
         return output.getvalue().encode('utf-8')
     except Exception as e:
         st.sidebar.error(f"Erro ao processar o arquivo {uploaded_file.name}: {e}")
@@ -388,8 +388,10 @@ def carregar_dados_evolucao(_repo, closed_ticket_ids_list, dias_para_analisar=7)
         st.error(f"Erro ao carregar evolução: {e}")
         return pd.DataFrame()
 
+# --- Função find_closest_snapshot com indentação corrigida ---
 @st.cache_data(ttl=300)
 def find_closest_snapshot(_repo, current_report_date, target_date):
+    """Encontra o snapshot mais próximo da target_date, buscando nos últimos ~10 dias."""
     try:
         all_files_content = _repo.get_contents("snapshots")
         snapshots = []
@@ -412,11 +414,12 @@ def find_closest_snapshot(_repo, current_report_date, target_date):
     except GithubException as e:
         if e.status == 404: # Se a pasta snapshots não existir
             return None, None
-        st.warning(f"Erro ao buscar snapshots no GitHub: {e}")
-        return None, None
+        st.warning(f"Erro ao buscar snapshots no GitHub: {e}") # Correct indentation
+        return None, None # Correct indentation
     except Exception as e:
-        st.warning(f"Erro inesperado ao buscar snapshots: {e}")
-        return None, None
+        st.warning(f"Erro inesperado ao buscar snapshots: {e}") # Correct indentation
+        return None, None # Correct indentation
+# --- Fim da correção ---
 
 
 st.html("""<style>#GithubIcon { visibility: hidden; } .metric-box { border: 1px solid #CCCCCC; padding: 10px; border-radius: 5px; text-align: center; box-shadow: 0px 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; } a.metric-box { display: block; color: inherit; text-decoration: none !important; } a.metric-box:hover { background-color: #f0f2f6; text-decoration: none !important; } .metric-box span { display: block; width: 100%; text-decoration: none !important; } .metric-box .value { font-size: 2.5em; font-weight: bold; color: #375623; } .metric-box .label { font-size: 1em; color: #666666; }</style>""")
@@ -543,6 +546,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-730 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.20-729 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
