@@ -6,3 +6,4 @@ openpyxl
 Pillow
 PyGithub
 kaleido
+chromium-browser
