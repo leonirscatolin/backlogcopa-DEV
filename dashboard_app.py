@@ -1,4 +1,4 @@
-# VERSÃO v0.9.30-747 (Relatório .eml com Tabelas Corrigidas)
+# VERSÃO v0.9.30-749 (Função .eml Removida)
 
 import streamlit as st
 import pandas as pd
@@ -295,9 +295,9 @@ def analisar_aging(_df_atual):
                 st.dataframe(linhas_invalidas[[c for c in ['ID do ticket', date_col_name] if c in linhas_invalidas.columns]].head())
             df.dropna(subset=[date_col_name], inplace=True)
         else:
-             df['Dias em Aberto'] = pd.NA
-             df['Faixa de Antiguidade'] = "Erro de Data"
-             return df
+            df['Dias em Aberto'] = pd.NA
+            df['Faixa de Antiguidade'] = "Erro de Data"
+            return df
 
 
     hoje = pd.to_datetime('today').normalize()
@@ -820,7 +820,7 @@ def gerar_conteudo_email_html(
                        # Tentar converter X para numérico ou data para ordenar corretamente
                        df_graph_long['_sort_key'] = pd.to_numeric(df_graph_long[x_axis_name], errors='coerce')
                        if df_graph_long['_sort_key'].isna().all(): # Se falhou, tentar como data (DD/MM)
-                            df_graph_long['_sort_key'] = pd.to_datetime(df_graph_long[x_axis_name].astype(str).str.split(' ').str[0], format='%d/%m', errors='coerce')
+                           df_graph_long['_sort_key'] = pd.to_datetime(df_graph_long[x_axis_name].astype(str).str.split(' ').str[0], format='%d/%m', errors='coerce')
                        
                        # Se conseguiu converter, ordena, senão usa a ordem original
                        if not df_graph_long['_sort_key'].isna().all():
@@ -845,19 +845,19 @@ def gerar_conteudo_email_html(
                     html_parts.append(f"<p style='text-align:center; font-size:0.8em;'>(Tabela truncada em 100 linhas)</p>")
                     df_graph_long_display = df_graph_long.head(100)
                 else:
-                     df_graph_long_display = df_graph_long
+                    df_graph_long_display = df_graph_long
                 
                 # Formatar datas se houver coluna datetime (embora o X já deva ser string)
                 for col in df_graph_long_display.select_dtypes(include=['datetime64[ns]']).columns:
-                     df_graph_long_display[col] = df_graph_long_display[col].dt.strftime('%d/%m/%Y')
-                     
+                    df_graph_long_display[col] = df_graph_long_display[col].dt.strftime('%d/%m/%Y')
+                    
                 # Converter valores numéricos para inteiros se possível
                 if 'Valor' in df_graph_long_display.columns:
-                     # Tenta converter para Int64 que aceita NA, depois para string
-                     try:
-                          df_graph_long_display['Valor'] = df_graph_long_display['Valor'].astype('float').astype('Int64').astype(str).replace('<NA>', '')
-                     except Exception: # Se falhar, apenas converte para string
-                          df_graph_long_display['Valor'] = df_graph_long_display['Valor'].astype(str)
+                    # Tenta converter para Int64 que aceita NA, depois para string
+                    try:
+                        df_graph_long_display['Valor'] = df_graph_long_display['Valor'].astype('float').astype('Int64').astype(str).replace('<NA>', '')
+                    except Exception: # Se falhar, apenas converte para string
+                        df_graph_long_display['Valor'] = df_graph_long_display['Valor'].astype(str)
 
 
                 html_table = df_graph_long_display.to_html(classes='email-table', index=False, border=0, justify='left') # Justificar à esquerda
@@ -1195,7 +1195,7 @@ try:
         st.error(f"Ocorreu um erro ao pré-calcular dados da Tab4: {e_tab4}")
     
     
-    tab1, tab2, tab3, tab4 = st.tabs(["Dashboard Completo", "Report Visual & Download", "Evolução Semanal", "Evolução Aging"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Dashboard Completo", "Report Visual", "Evolução Semanal", "Evolução Aging"])
 
     with tab1:
         info_messages = ["**Filtros e Regras Aplicadas:**", "- Grupos contendo 'RH' foram desconsiderados da análise.", "- A contagem de dias do chamado desconsidera o dia da sua abertura (prazo -1 dia)."]
@@ -1254,7 +1254,7 @@ try:
                 # Formatar data após o cálculo
                 df_encerrados_display[date_col_enc] = df_encerrados_display[date_col_enc].dt.strftime('%d/%m/%Y')
             else:
-                 df_encerrados_display['Dias em Aberto'] = "Data Criação?"
+                df_encerrados_display['Dias em Aberto'] = "Data Criação?"
 
             colunas_encerrados = ['ID do ticket', 'Descrição', 'Atribuir a um grupo', 'Dias em Aberto']
             if date_col_enc and date_col_enc not in colunas_encerrados:
@@ -1300,12 +1300,12 @@ try:
                 }
                 date_col_name_tab1 = next((col for col in ['Data de criação', 'Data de Criacao'] if col in st.session_state.last_filtered_df.columns), None)
                 if date_col_name_tab1 == 'Data de Criacao':
-                     colunas_para_exibir_renomeadas['Data de Criacao'] = 'Data de criação'
-                     if 'Data de criação' in colunas_para_exibir_renomeadas: del colunas_para_exibir_renomeadas['Data de criação']
+                    colunas_para_exibir_renomeadas['Data de Criacao'] = 'Data de criação'
+                    if 'Data de criação' in colunas_para_exibir_renomeadas: del colunas_para_exibir_renomeadas['Data de criação']
 
                 colunas_a_exibir_final = [colunas_para_exibir_renomeadas[orig_col]
-                                           for orig_col in colunas_para_exibir_renomeadas
-                                           if orig_col in st.session_state.last_filtered_df.columns]
+                                          for orig_col in colunas_para_exibir_renomeadas
+                                          if orig_col in st.session_state.last_filtered_df.columns]
                 colunas_desabilitadas_final = [col for col in ['ID do ticket', 'Descrição', 'Grupo Atribuído', 'Dias em Aberto', 'Data de criação'] if col in colunas_a_exibir_final]
 
 
@@ -1325,10 +1325,10 @@ try:
                 
                 date_col_busca = next((col for col in ['Data de criação', 'Data de Criacao'] if col in resultados_busca.columns), None)
                 if date_col_busca:
-                     if pd.api.types.is_datetime64_any_dtype(resultados_busca[date_col_busca]):
-                          resultados_busca[date_col_busca] = resultados_busca[date_col_busca].dt.strftime('%d/%m/%Y')
-                     else:
-                          resultados_busca[date_col_busca] = pd.to_datetime(resultados_busca[date_col_busca], errors='coerce').dt.strftime('%d/%m/%Y')
+                    if pd.api.types.is_datetime64_any_dtype(resultados_busca[date_col_busca]):
+                         resultados_busca[date_col_busca] = resultados_busca[date_col_busca].dt.strftime('%d/%m/%Y')
+                    else:
+                         resultados_busca[date_col_busca] = pd.to_datetime(resultados_busca[date_col_busca], errors='coerce').dt.strftime('%d/%m/%Y')
 
 
                 st.write(f"Encontrados {len(resultados_busca)} chamados para o grupo '{grupo_selecionado}':")
@@ -1337,47 +1337,9 @@ try:
                 st.data_editor(resultados_busca[colunas_para_exibir_busca_exist], width='stretch', hide_index=True, disabled=True)
 
     with tab2:
-        st.subheader("Baixar Relatório em Formato Email (.eml)")
-        st.markdown("Este recurso compila os principais indicadores e gráficos (como tabelas) do dashboard em um **arquivo `.eml`**. Abra este arquivo com seu programa de email (Outlook, etc.) para visualizá-lo como um email formatado.")
-
-        if st.button("Gerar e Baixar Arquivo .eml", width='stretch'):
-            with st.spinner("Gerando o arquivo do relatório..."):
-                try:
-                    email_html, imagens_anexas = gerar_conteudo_email_html(
-                        fig_composicao_grupo=fig_stacked_bar_para_relatorio,
-                        total_aberto=total_chamados,
-                        total_fechados=total_fechados,
-                        data_atual=data_atual_str,
-                        hora_atual=hora_atualizacao_str,
-                        df_aging_counts=aging_counts,
-                        fig_evol_geral=fig_total_evolucao,
-                        fig_evol_grupo=fig_evolucao_grupo,
-                        hoje_counts_df=hoje_counts_df,
-                        df_comparacao_dados=df_comparacao_dados_7dias,
-                        data_comparacao_str=data_comparacao_str_7dias,
-                        ordem_faixas=ordem_faixas_scaffold,
-                        formatar_delta_card_func=formatar_delta_card,
-                        fig_evol_7_dias=fig_aging_all
-                    )
-
-                    assunto_email = f"Relatório Backlog Copa Energia + Belago - {data_atual_str}"
-                    eml_file_buffer = gerar_arquivo_eml(assunto_email, email_html, imagens_anexas)
-
-                    if eml_file_buffer:
-                        st.success("Arquivo .eml gerado!")
-                        st.download_button(
-                            label="Baixar Relatório (.eml)",
-                            data=eml_file_buffer,
-                            file_name=f"relatorio_backlog_{date.today().strftime('%Y-%m-%d')}.eml",
-                            mime="message/rfc822",
-                            key="download_eml_report"
-                        )
-
-                except Exception as e:
-                    st.error(f"Erro inesperado durante a geração do arquivo .eml: {e}")
-                    st.exception(e)
-
-        st.markdown("---")
+        # --- SEÇÃO DE DOWNLOAD .EML REMOVIDA ---
+        # (O código que estava aqui foi removido conforme solicitado)
+        # --- FIM DA SEÇÃO REMOVIDA ---
 
         # Conteúdo visual original da Tab2
         st.subheader("Resumo Visual do Backlog Atual")
@@ -1576,6 +1538,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.30-747 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.30-749 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
