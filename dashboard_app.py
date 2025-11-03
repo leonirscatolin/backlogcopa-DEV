@@ -1,4 +1,4 @@
-# VERSÃO v0.9.50-760 (Teste Automação por Email - Método Antigo)
+# VERSÃO v0.9.52-762 (Versão Manual Estável)
 
 import streamlit as st
 import pandas as pd
@@ -15,10 +15,8 @@ from urllib.parse import quote
 import json
 import colorsys
 import re
-import requests
-import imaplib # <-- NOVO IMPORT
-import email # <-- NOVO IMPORT
-from email.header import decode_header
+# Removido: import requests
+# Removido: import imaplib, email
 
 # --- INÍCIO - Constantes Globais ---
 GRUPOS_EXCLUSAO_PERMANENTE_REGEX = r'RH|Aprovadores GGM|RDM-GTR'
@@ -604,126 +602,6 @@ def trigger_serviceaide_fetch(repo):
     except Exception as e:
         st.sidebar.error(f"Erro no teste automático: {e}")
 
-# --- INÍCIO DA FUNÇÃO DE TESTE GMAIL v0.9.50 ---
-def trigger_gmail_fetch(repo):
-    st.sidebar.info("Iniciando teste de busca (Email)...")
-    try:
-        GMAIL_HOST = "imap.gmail.com"
-        GMAIL_USER = st.secrets.get("GMAIL_USER")
-        GMAIL_PASS = st.secrets.get("GMAIL_APP_PASS") # Deve ser a senha normal (se "app menos seguro" estiver ON)
-        EMAIL_SUBJECT_TARGET = "ENC: Relatório Fechados" # <-- ATENÇÃO: Verifique se este é o assunto exato
-
-        if not GMAIL_USER or not GMAIL_PASS:
-            st.sidebar.error("Segredos 'GMAIL_USER' ou 'GMAIL_APP_PASS' não configurados.")
-            return
-
-        st.sidebar.write("Conectando ao Gmail...")
-        mail = imaplib.IMAP4_SSL(GMAIL_HOST)
-        mail.login(GMAIL_USER, GMAIL_PASS)
-        mail.select("inbox")
-        
-        # Busca por emails NÃO LIDOS (UNSEEN) com o assunto
-        status, messages = mail.search(None, f'(UNSEEN SUBJECT "{EMAIL_SUBJECT_TARGET}")')
-        if status != "OK":
-            st.sidebar.error("Falha ao buscar e-mails.")
-            mail.logout()
-            return
-        
-        message_ids = messages[0].split()
-        if not message_ids:
-            st.sidebar.warning(f"Nenhum e-mail *novo* encontrado com o assunto: '{EMAIL_SUBJECT_TARGET}'")
-            mail.logout()
-            return
-
-        st.sidebar.success(f"Encontrado(s) {len(message_ids)} e-mail(s) novo(s). Processando o mais recente...")
-        
-        # Pegar o e-mail mais recente
-        latest_id = message_ids[-1]
-        status, msg_data = mail.fetch(latest_id, "(RFC822)")
-        
-        content_fechados = None
-        
-        for response_part in msg_data:
-            if isinstance(response_part, tuple):
-                msg = email.message_from_bytes(response_part[1])
-                
-                if msg.is_multipart():
-                    for part in msg.walk():
-                        content_type = part.get_content_type()
-                        if "csv" in content_type:
-                            st.sidebar.write("Anexo CSV encontrado!")
-                            content_fechados = part.get_payload(decode=True)
-                            break
-                if content_fechados:
-                    break
-        
-        mail.logout()
-
-        if content_fechados is None:
-            st.sidebar.error("E-mail encontrado, mas não foi possível extrair o anexo CSV.")
-            return
-
-        # Se chegou aqui, temos o CSV. Reutilizar a lógica de atualização rápida:
-        with st.spinner("Processando anexo e atualizando o repositório..."):
-            now_sao_paulo = datetime.now(ZoneInfo('America/Sao_Paulo'))
-            commit_msg = f"Atualização automática (Email Teste) em {now_sao_paulo.strftime('%d/%m/%Y %H:%M')}"
-
-            # 1. Salvar IDs anteriores
-            df_fechados_anterior = read_github_file(repo, "dados_fechados.csv")
-            previous_closed_ids = set()
-            if not df_fechados_anterior.empty:
-                id_col_anterior = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_fechados_anterior.columns), None)
-                if id_col_anterior:
-                    previous_closed_ids = set(df_fechados_anterior[id_col_anterior].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().dropna().unique())
-            json_content = json.dumps(list(previous_closed_ids), indent=4)
-            update_github_file(repo, "previous_closed_ids.json", json_content.encode('utf-8'), "Snapshot dos IDs de fechados anteriores")
-
-            # 2. Salvar novo arquivo de fechados
-            update_github_file(repo, "dados_fechados.csv", content_fechados, commit_msg)
-
-            # 3. Atualizar hora
-            datas_existentes = read_github_text_file(repo, "datas_referencia.txt")
-            data_atual_existente = datas_existentes.get('data_atual', 'N/A')
-            data_15dias_existente = datas_existentes.get('data_15dias', 'N/A')
-            hora_atualizacao_nova = now_sao_paulo.strftime('%H:%M')
-            datas_referencia_content_novo = (f"data_atual:{data_atual_existente}\n"
-                                            f"data_15dias:{data_15dias_existente}\n"
-                                            f"hora_atualizacao:{hora_atualizacao_nova}")
-            update_github_file(repo, "datas_referencia.txt", datas_referencia_content_novo.encode('utf-8'), commit_msg)
-            
-            # 4. Atualizar snapshot
-            df_atual_base = read_github_file(repo, "dados_atuais.csv")
-            df_fechados_novo = pd.read_csv(BytesIO(content_fechados), delimiter=';', dtype={'ID do ticket': str, 'ID do Ticket': str, 'ID': str})
-            
-            id_col_fechados = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_fechados_novo.columns), None)
-            closed_ids_set = set(df_fechados_novo[id_col_fechados].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().dropna().unique())
-
-            id_col_atual = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_atual_base.columns), None)
-            df_atual_base[id_col_atual] = df_atual_base[id_col_atual].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-            df_atualizado_filtrado = df_atual_base[~df_atual_base[id_col_atual].isin(closed_ids_set)]
-
-            output = StringIO()
-            df_atualizado_filtrado.to_csv(output, index=False, sep=';', encoding='utf-8')
-            content_snapshot_novo = output.getvalue().encode('utf-8')
-
-            today_str = now_sao_paulo.strftime('%Y-%m-%d')
-            snapshot_path = f"snapshots/backlog_{today_str}.csv"
-            commit_msg_snapshot = f"Atualizando snapshot (auto-email) em {now_sao_paulo.strftime('%d/%m/%Y %H:%M')}"
-            update_github_file(repo, snapshot_path, content_snapshot_novo, commit_msg_snapshot)
-            
-            # 5. Sucesso
-            st.sidebar.success("Busca por e-mail e atualização de snapshot concluídas! Recarregando...")
-            st.cache_data.clear()
-            st.cache_resource.clear()
-            st.rerun()
-
-    except imaplib.IMAP4.error as e:
-        st.sidebar.error(f"Erro de Login no Gmail: {e}")
-        st.sidebar.warning("Verifique se 'Acesso a app menos seguro' está ATIVADO e se o Google não bloqueou a tentativa (verifique a caixa de entrada).")
-    except Exception as e:
-        st.sidebar.error(f"Erro inesperado no teste de email: {e}")
-# --- FIM DA FUNÇÃO DE TESTE GMAIL ---
-
 
 logo_copa_b64 = get_image_as_base64("logo_sidebar.png")
 logo_belago_b64 = get_image_as_base64("logo_belago.png")
@@ -857,17 +735,14 @@ if is_admin:
 elif password:
     st.sidebar.error("Senha incorreta.")
 
+# --- v0.9.51: Removido teste de email, mantido teste de API ---
 if is_admin:
     st.sidebar.markdown("---")
     st.sidebar.subheader("Teste de Automação")
-    st.sidebar.info("Configure os Secrets (ServiceAide ou Gmail) e clique para testar a busca automática.")
+    st.sidebar.info("Para automação: configure os Secrets 'SERVICEAIDE_USER' e 'SERVICEAIDE_PASS' (para uma conta sem SSO) e clique abaixo para testar.")
     
     if st.sidebar.button("Testar Busca (API ServiceAide)"):
         trigger_serviceaide_fetch(repo)
-
-    if st.sidebar.button("Testar Busca (Email Método Antigo)"):
-        st.sidebar.warning("Este método requer 'Acesso a app menos seguro' ATIVADO na conta Gmail.")
-        trigger_gmail_fetch(repo)
 
 try:
     if 'contacted_tickets' not in st.session_state:
@@ -1443,6 +1318,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.49-759 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.52-762 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
