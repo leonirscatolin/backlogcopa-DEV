@@ -1,4 +1,4 @@
-# VERSÃO v0.9.52-762 (Versão Manual Estável)
+# VERSÃO v0.9.63-773 (Limpeza final)
 
 import streamlit as st
 import pandas as pd
@@ -15,10 +15,8 @@ from urllib.parse import quote
 import json
 import colorsys
 import re
-# Removido: import requests
-# Removido: import imaplib, email
 
-# --- INÍCIO - Constantes Globais ---
+# --- Constantes Globais ---
 GRUPOS_EXCLUSAO_PERMANENTE_REGEX = r'RH|Aprovadores GGM|RDM-GTR'
 GRUPOS_EXCLUSAO_PERMANENTE_TEXTO = "'RH', 'Aprovadores GGM' ou 'RDM-GTR'"
 
@@ -72,7 +70,7 @@ a.metric-box:hover {
 .metric-box .value { /* Número principal */
     font-size: 2.5em;
     font-weight: bold;
-    color: #375623;
+    color: #375623; 
 }
 .metric-box .delta { /* Texto de comparação (delta) */
     font-size: 0.9em;
@@ -82,6 +80,27 @@ a.metric-box:hover {
 .delta-positive { color: #d9534f; } /* Vermelho para aumento */
 .delta-negative { color: #5cb85c; } /* Verde para redução */
 .delta-neutral { color: #666666; } /* Cinza para sem mudança ou N/A */
+
+/* Estiliza os botões de Salvar no Admin Sidebar */
+[data-testid="stSidebar"] [data-testid="stButton"] button {
+    background-color: #f28801;
+    color: white;
+    border: 1px solid #f28801;
+}
+[data-testid="stSidebar"] [data-testid="stButton"] button:hover {
+    background-color: #d97900; /* Laranja mais escuro no hover */
+    color: white;
+    border-color: #d97900;
+}
+[data-testid="stSidebar"] [data-testid="stButton"] button:active {
+    background-color: #b86700; /* Laranja ainda mais escuro no clique */
+    color: white;
+    border-color: #b86700;
+}
+[data-testid="stSidebar"] [data-testid="stButton"] button:focus:not(:active) {
+    border-color: #f28801;
+    box-shadow: 0 0 0 0.2rem rgba(242, 136, 1, 0.5); /* Anel de foco laranja */
+}
 </style>
 """)
 
@@ -112,18 +131,18 @@ def update_github_file(_repo, file_path, file_content, commit_message):
         if isinstance(file_content, str):
             file_content = file_content.encode('utf-8')
         _repo.update_file(contents.path, commit_message, file_content, contents.sha)
-        if file_path not in ["contacted_tickets.json", "ticket_observations.json", "datas_referencia.txt", "previous_closed_ids.json"]: # Evitar spam
+        if file_path not in ["contacted_tickets.json", "ticket_observations.json", "datas_referencia.txt", "previous_closed_ids.json"]: 
             st.sidebar.info(f"Arquivo '{file_path}' atualizado.")
     except GithubException as e:
         if e.status == 404:
             if isinstance(file_content, str):
                 file_content = file_content.encode('utf-8')
             _repo.create_file(file_path, commit_message, file_content)
-            if file_path not in ["contacted_tickets.json", "ticket_observations.json", "datas_referencia.txt", "previous_closed_ids.json"]: # Evitar spam
+            if file_path not in ["contacted_tickets.json", "ticket_observations.json", "datas_referencia.txt", "previous_closed_ids.json"]: 
                 st.sidebar.info(f"Arquivo '{file_path}' criado.")
         else:
             st.sidebar.error(f"Falha ao salvar '{file_path}': {e}")
-            raise # Re-levanta a exceção para o bloco superior tratar
+            raise 
 
 @st.cache_data(ttl=300)
 def read_github_file(_repo, file_path):
@@ -181,7 +200,7 @@ def read_github_text_file(_repo, file_path):
                 dates[key.strip()] = value.strip()
         return dates
     except GithubException as e:
-        if e.status == 404: # Arquivo pode não existir na primeira vez
+        if e.status == 404: 
             return {}
         else:
             st.warning(f"Erro ao ler {file_path}: {e}")
@@ -192,7 +211,7 @@ def read_github_text_file(_repo, file_path):
 
 
 @st.cache_data(ttl=300)
-def read_github_json_file(_repo, file_path, default_return_type='dict'): # Modificado para aceitar lista
+def read_github_json_file(_repo, file_path, default_return_type='dict'): 
     try:
         file_content = _repo.get_contents(file_path).decoded_content.decode("utf-8")
         return json.loads(file_content) if file_content else (default_return_type == 'dict' and {} or [])
@@ -341,7 +360,7 @@ def sync_ticket_data():
 
 
 @st.cache_data(ttl=3600)
-def carregar_dados_evolucao(_repo, dias_para_analisar=7): # v0.9.40: Removido 'closed_ticket_ids_list'
+def carregar_dados_evolucao(_repo, dias_para_analisar=7): 
     try:
         all_files_content = _repo.get_contents("snapshots")
         all_files = [f.path for f in all_files_content]
@@ -416,7 +435,7 @@ def find_closest_snapshot_before(_repo, current_report_date, target_date):
         return None, None
 
 @st.cache_data(ttl=3600)
-def carregar_evolucao_aging(_repo, dias_para_analisar=90): # v0.9.40: Removido 'closed_ticket_ids_list'
+def carregar_evolucao_aging(_repo, dias_para_analisar=90): 
     try:
         all_files_content = _repo.get_contents("snapshots")
         all_files = [f.path for f in all_files_content]
@@ -515,92 +534,6 @@ def formatar_delta_card(delta_abs, delta_perc, valor_comparacao, data_comparacao
         delta_class = "delta-neutral"
 
     return delta_text, delta_class
-
-
-def trigger_serviceaide_fetch(repo):
-    st.sidebar.info("Iniciando teste de busca (API ServiceAide)...")
-    try:
-        user = st.secrets.get("SERVICEAIDE_USER")
-        pwd = st.secrets.get("SERVICEAIDE_PASS")
-        if not user or not pwd:
-            st.sidebar.error("Segredos 'SERVICEAIDE_USER' ou 'SERVICEAIDE_PASS' não configurados.")
-            return
-
-        base_url = "https://csm3.serviceaide.com/reportservice"
-        resource_path = "/shared/adhoccomponents/Massa_de_dados___TOTAL___Fechados"
-        target_url = f"{base_url}/rest_v2/reports{resource_path}.csv"
-        
-        st.sidebar.write(f"Tentando acessar: `{target_url}`")
-
-        response = requests.get(target_url, auth=(user, pwd))
-
-        if response.status_code != 200:
-            st.sidebar.error(f"Falha na conexão. Status: {response.status_code}")
-            st.sidebar.write(f"Resposta (primeiros 500 chars): {response.text[:500]}")
-            return
-
-        content_type = response.headers.get('Content-Type', '')
-        if 'text/html' in content_type:
-            st.sidebar.error("Erro: O servidor retornou uma página HTML, não um arquivo CSV. Verifique a URL ou as credenciais (login pode ter falhado).")
-            return
-
-        if 'text/csv' not in content_type and 'application/csv' not in content_type:
-            st.sidebar.warning(f"Tipo de conteúdo inesperado: {content_type}. Tentando processar mesmo assim...")
-
-        content_fechados = response.content
-        st.sidebar.success(f"Dados baixados! ({len(content_fechados)} bytes)")
-
-        with st.spinner("Processando dados e atualizando o repositório..."):
-            now_sao_paulo = datetime.now(ZoneInfo('America/Sao_Paulo'))
-            commit_msg = f"Atualização automática (TESTE) em {now_sao_paulo.strftime('%d/%m/%Y %H:%M')}"
-
-            df_fechados_anterior = read_github_file(repo, "dados_fechados.csv")
-            previous_closed_ids = set()
-            if not df_fechados_anterior.empty:
-                id_col_anterior = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_fechados_anterior.columns), None)
-                if id_col_anterior:
-                    previous_closed_ids = set(df_fechados_anterior[id_col_anterior].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().dropna().unique())
-            
-            json_content = json.dumps(list(previous_closed_ids), indent=4)
-            update_github_file(repo, "previous_closed_ids.json", json_content.encode('utf-8'), "Snapshot dos IDs de fechados anteriores")
-
-            update_github_file(repo, "dados_fechados.csv", content_fechados, commit_msg)
-
-            datas_existentes = read_github_text_file(repo, "datas_referencia.txt")
-            data_atual_existente = datas_existentes.get('data_atual', 'N/A')
-            data_15dias_existente = datas_existentes.get('data_15dias', 'N/A')
-            hora_atualizacao_nova = now_sao_paulo.strftime('%H:%M')
-            datas_referencia_content_novo = (f"data_atual:{data_atual_existente}\n"
-                                            f"data_15dias:{data_15dias_existente}\n"
-                                            f"hora_atualizacao:{hora_atualizacao_nova}")
-            update_github_file(repo, "datas_referencia.txt", datas_referencia_content_novo.encode('utf-8'), commit_msg)
-            
-            df_atual_base = read_github_file(repo, "dados_atuais.csv")
-            df_fechados_novo = pd.read_csv(BytesIO(content_fechados), delimiter=';', dtype={'ID do ticket': str, 'ID do Ticket': str, 'ID': str})
-            
-            id_col_fechados = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_fechados_novo.columns), None)
-            closed_ids_set = set(df_fechados_novo[id_col_fechados].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().dropna().unique())
-
-            id_col_atual = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_atual_base.columns), None)
-            df_atual_base[id_col_atual] = df_atual_base[id_col_atual].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-            df_atualizado_filtrado = df_atual_base[~df_atual_base[id_col_atual].isin(closed_ids_set)]
-
-            output = StringIO()
-            df_atualizado_filtrado.to_csv(output, index=False, sep=';', encoding='utf-8')
-            content_snapshot_novo = output.getvalue().encode('utf-8')
-
-            today_str = now_sao_paulo.strftime('%Y-%m-%d')
-            snapshot_path = f"snapshots/backlog_{today_str}.csv"
-            commit_msg_snapshot = f"Atualizando snapshot (auto-teste) em {now_sao_paulo.strftime('%d/%m/%Y %H:%M')}"
-            update_github_file(repo, snapshot_path, content_snapshot_novo, commit_msg_snapshot)
-            
-            st.sidebar.success("Busca automática e atualização de snapshot concluídas! Recarregando...")
-            st.cache_data.clear()
-            st.cache_resource.clear()
-            st.rerun()
-
-    except Exception as e:
-        st.sidebar.error(f"Erro no teste automático: {e}")
 
 
 logo_copa_b64 = get_image_as_base64("logo_sidebar.png")
@@ -734,15 +667,6 @@ if is_admin:
             st.sidebar.warning("Por favor, carregue o arquivo de chamados fechados para salvar.")
 elif password:
     st.sidebar.error("Senha incorreta.")
-
-# --- v0.9.51: Removido teste de email, mantido teste de API ---
-if is_admin:
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Teste de Automação")
-    st.sidebar.info("Para automação: configure os Secrets 'SERVICEAIDE_USER' e 'SERVICEAIDE_PASS' (para uma conta sem SSO) e clique abaixo para testar.")
-    
-    if st.sidebar.button("Testar Busca (API ServiceAide)"):
-        trigger_serviceaide_fetch(repo)
 
 try:
     if 'contacted_tickets' not in st.session_state:
@@ -886,7 +810,10 @@ try:
             
             date_col_name = next((col for col in ['Data de criação', 'Data de Criacao'] if col in df_encerrados_para_exibir.columns), None)
             
-            colunas_para_exibir_fechados = ['Status', 'ID do ticket', 'Descrição', 'Atribuir a um grupo']
+            colunas_para_exibir_fechados = ['Status', 'ID do ticket', 'Descrição']
+            
+            novo_nome_analista = "Analista de Resolução" 
+            analista_col_name_origem = "Analista atribuído" 
             
             id_col_encerrados = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_encerrados_para_exibir.columns), None)
             if id_col_encerrados:
@@ -895,6 +822,26 @@ try:
                 )
             else:
                 df_encerrados_para_exibir['Status'] = ""
+            
+            id_col_fechados = next((col for col in ['ID do ticket', 'ID do Ticket', 'ID'] if col in df_fechados.columns), None)
+            
+            if id_col_fechados and analista_col_name_origem in df_fechados.columns:
+                df_analistas_lookup = df_fechados[[id_col_fechados, analista_col_name_origem]].drop_duplicates(subset=[id_col_fechados]).copy()
+                
+                df_analistas_lookup[analista_col_name_origem] = df_analistas_lookup[analista_col_name_origem].astype(str).replace(r'\s+', ' ', regex=True).str.strip()
+                
+                df_encerrados_para_exibir = pd.merge(
+                    df_encerrados_para_exibir,
+                    df_analistas_lookup,
+                    left_on='ID do ticket',
+                    right_on=id_col_fechados,
+                    how='left'
+                )
+                
+                df_encerrados_para_exibir.rename(columns={analista_col_name_origem: novo_nome_analista}, inplace=True)
+                colunas_para_exibir_fechados.append(novo_nome_analista)
+            
+            colunas_para_exibir_fechados.append('Atribuir a um grupo')
 
             if date_col_name:
                 try:
@@ -980,7 +927,6 @@ try:
                     type="primary"
                 )
                 
-                # v0.9.43: Aviso de "Alterações não salvas" ao tentar fechar a aba
                 if st.session_state.ticket_editor.get('edited_rows'):
                     js_code = """
                     <script>
@@ -1318,6 +1264,6 @@ except Exception as e:
 
 st.markdown("---")
 st.markdown("""
-<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.52-762 | Este dashboard está em desenvolvimento.</p>
+<p style='text-align: center; color: #666; font-size: 0.9em; margin-bottom: 0;'>v0.9.63-773 | Este dashboard está em desenvolvimento.</p>
 <p style='text-align: center; color: #666; font-size: 0.9em; margin-top: 0;'>Desenvolvido por Leonir Scatolin Junior</p>
 """, unsafe_allow_html=True)
